@@ -4,6 +4,7 @@ export const CastSchema = Object({
 	fid: t.Number(),
 	hash: t.String(),
 	text: t.Union([t.String(), t.Null()]),
+	rawText: t.Union([t.String(), t.Null()]),
 	embeds: t.Array(
 		t.Object({
 			url: t.Optional(t.String()),
