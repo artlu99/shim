@@ -234,3 +234,51 @@ export const getSignersByFid = async (fid: number, signer: string) => {
 		return undefined;
 	}
 };
+
+export const getStorageByFid = async (fid: number) => {
+	try {
+		const res = await cachedFetcherGet<{
+			limits: {
+				storeType:
+					| "Casts"
+					| "Links"
+					| "Reactions"
+					| "UserData"
+					| "Verifications"
+					| "UsernameProofs";
+				name:
+					| "CASTS"
+					| "LINKS"
+					| "REACTIONS"
+					| "USER_DATA"
+					| "VERIFICATIONS"
+					| "USERNAME_PROOFS";
+				limit: number;
+				used: number;
+				earliestTimestamp: number;
+				earliestHash: string[];
+			}[];
+			units: number;
+			unitDetails: {
+				unitType: "UnitTypeLegacy" | "UnitType2024";
+				unitSize: number;
+			}[];
+			tierDetails: {
+				tierType: "TierTypeNone" | "TierTypePro";
+				expires_at: number;
+			}[];
+		}>(`/v1/storageLimitsByFid?fid=${fid}`, Ttl.MEDIUM);
+		return {
+			limits: res.limits,
+			units: res.units,
+			unitDetails: res.unitDetails,
+		};
+	} catch (error) {
+		console.error(
+			"Error fetching storage by fid:",
+			fid,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+		return undefined;
+	}
+};
