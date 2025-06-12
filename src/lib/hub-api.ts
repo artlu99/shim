@@ -1,5 +1,4 @@
 import { fetcher } from "itty-fetcher";
-import { LRUCache } from "lru-cache";
 import { retry, sift } from "radash";
 import { VERBOSE_LOGGING } from "../constants";
 import type { User } from "../types";
@@ -11,14 +10,6 @@ import type {
 	UserDataAddMessage,
 } from "./farcaster-types";
 import redis, { Ttl } from "./redis";
-
-// In-memory cache for username lookups using LRU cache
-const usernameCache = new LRUCache<number, string>({
-	max: 1000, // Maximum number of items to store
-	ttl: 1000 * 60 * 60 * 2, // 2 hours in milliseconds
-	updateAgeOnGet: true, // Reset TTL on access
-	allowStale: false, // Don't return stale items
-});
 
 const hub = () => {
 	// snap, crackle, pop, pow
@@ -170,19 +161,8 @@ export const getHubUserByFid = async (fid: number) => {
 };
 
 export const getUsernameByFid = async (fid: number) => {
-	// Check in-memory cache first
-	const cachedUsername = usernameCache.get(fid);
-	if (cachedUsername !== undefined) {
-		return cachedUsername;
-	}
-
 	const user = await getHubUserByFid(fid);
 	const username = user?.username ?? undefined;
-
-	// Cache the result unless it's undefined
-	if (username !== undefined) {
-		usernameCache.set(fid, username);
-	}
 
 	return username;
 };
