@@ -20,7 +20,7 @@ import redis, { Ttl } from "./redis";
 import { hexToUint8Array, uin8ArrayToHex } from "./util";
 
 const DEV = process.env.DEV === "FALSE";
-const DO_STREAM = true;
+const DO_STREAM = false;
 
 const hubRpcEndpoint = "hub.merv.fun:3383";
 
@@ -56,10 +56,6 @@ client?.$.waitForReady(Date.now() + 5000, async (e) => {
 					const message = event?.mergeMessageBody?.message as CastAddMessage;
 					const { data } = message;
 					if (message && data?.castAddBody) {
-						const textDisplay =
-							(data.castAddBody.text?.length ?? 0) > 100
-								? `${data.castAddBody.text.slice(0, 100)}...`
-								: data.castAddBody.text;
 						if (streamingFids.includes(data.fid)) {
 							const hash: `0x${string}` = `0x${Buffer.from(message.hash).toString("hex")}`;
 							const cast = await getCastById(data.fid, hash);
@@ -77,6 +73,10 @@ client?.$.waitForReady(Date.now() + 5000, async (e) => {
 							}
 							const unixTimestampMS = (data.timestamp + FARCASTER_EPOCH) * 1000;
 							const timestampStr = new Date(unixTimestampMS).toISOString();
+							const textDisplay =
+								(data.castAddBody.text?.length ?? 0) > 100
+									? `${data.castAddBody.text.slice(0, 100)}...`
+									: data.castAddBody.text;
 							VERBOSE_LOGGING &&
 								console.log(`[${timestampStr}] ${data.fid}: ${textDisplay}`);
 						}
