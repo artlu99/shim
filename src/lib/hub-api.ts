@@ -8,6 +8,7 @@ import type {
 	PaginatedMessagesResponse,
 	SignerOnChainEvent,
 	UserDataAddMessage,
+	UserNameProof,
 } from "./farcaster-types";
 import redis, { Ttl } from "./redis";
 
@@ -108,18 +109,22 @@ async function cachedFetcherPaginatedGet<T>(
 
 export const getHubUserByFid = async (fid: number) => {
 	try {
-		const res = await cachedFetcherGet<
-			PaginatedMessagesResponse<UserDataAddMessage>
-		>(`/v1/userDataByFid?fid=${fid}&reverse=true`, Ttl.MEDIUM);
-
-		const username = res?.messages.find(
-			// @ts-expect-error the typing is a white lie because it was deserialized over http
-			(m) => m.data.userDataBody.type === "USER_DATA_TYPE_USERNAME",
-		)?.data.userDataBody.value;
+		// typing is a white lie because it was deserialized over http
+		const res0 = await cachedFetcherGet<{ proofs: UserNameProof[] }>(
+			`/v1/userNameProofsByFid?fid=${fid}&reverse=true`,
+			Ttl.LONG,
+		);
+		const username = res0.proofs?.[0]?.name
+			? (res0.proofs[0].name as unknown as string)
+			: undefined;
 
 		if (!username) {
 			return undefined;
 		}
+
+		const res = await cachedFetcherGet<
+			PaginatedMessagesResponse<UserDataAddMessage>
+		>(`/v1/userDataByFid?fid=${fid}&reverse=true`, Ttl.MEDIUM);
 
 		const displayName =
 			res?.messages.find(
