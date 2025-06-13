@@ -24,12 +24,16 @@ interface Database {
 	};
 }
 
-const db = () => {
-	invariant(process.env.DATABASE_URL, "DATABASE_URL is not set");
+let dbInstance: Kysely<Database> | null = null;
 
-	return new Kysely<Database>({
-		dialect: new NeonDialect({ connectionString: process.env.DATABASE_URL }),
-	});
+const db = () => {
+	if (!dbInstance) {
+		invariant(process.env.DATABASE_URL, "DATABASE_URL is not set");
+		dbInstance = new Kysely<Database>({
+			dialect: new NeonDialect({ connectionString: process.env.DATABASE_URL }),
+		});
+	}
+	return dbInstance;
 };
 
 const CURSOR_VERSION = "v1";
@@ -77,7 +81,10 @@ export const upsertCasts = async (castsToUpsert: Cast[]) => {
 		modified += result.length;
 	}
 
-	VERBOSE_LOGGING && console.log(`upserted ${modified} out of ${pluralize(castsToUpsert.length, "cast")}`);
+	VERBOSE_LOGGING &&
+		console.log(
+			`upserted ${modified} out of ${pluralize(castsToUpsert.length, "cast")}`,
+		);
 
 	return modified;
 };
