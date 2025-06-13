@@ -24,70 +24,72 @@ const DO_STREAM = false;
 
 const hubRpcEndpoint = "hub.merv.fun:3383";
 
-const client =
-	DO_STREAM && !DEV
-		? getInsecureHubRpcClient(hubRpcEndpoint, {
-				"grpc.max_receive_message_length": 20 * 1024 * 1024,
-				"grpc.keepalive_time_ms": 30000,
-				"grpc.keepalive_timeout_ms": 10000,
-				"grpc.http2.min_time_between_pings_ms": 10000,
-				"grpc.keepalive_permit_without_calls": 1,
-			})
-		: undefined;
+const client = !DEV
+	? getInsecureHubRpcClient(hubRpcEndpoint, {
+			"grpc.max_receive_message_length": 20 * 1024 * 1024,
+			"grpc.keepalive_time_ms": 30000,
+			"grpc.keepalive_timeout_ms": 10000,
+			"grpc.http2.min_time_between_pings_ms": 10000,
+			"grpc.keepalive_permit_without_calls": 1,
+		})
+	: undefined;
 
-client?.$.waitForReady(Date.now() + 5000, async (e) => {
-	if (e) {
-		console.error(`Failed to connect to ${hubRpcEndpoint}:`, e);
-		process.exit(1);
-	} else {
-		console.log(`Connected to ${hubRpcEndpoint}`);
+DO_STREAM &&
+	client?.$.waitForReady(Date.now() + 5000, async (e) => {
+		if (e) {
+			console.error(`Failed to connect to ${hubRpcEndpoint}:`, e);
+			process.exit(1);
+		} else {
+			console.log(`Connected to ${hubRpcEndpoint}`);
 
-		const subscribeResult = await client.subscribe({
-			eventTypes: [HubEventType.MERGE_MESSAGE],
-		});
+			const subscribeResult = await client.subscribe({
+				eventTypes: [HubEventType.MERGE_MESSAGE],
+			});
 
-		if (subscribeResult.isOk()) {
-			const stream = subscribeResult.value as unknown as HubEvent[];
+			if (subscribeResult.isOk()) {
+				const stream = subscribeResult.value as unknown as HubEvent[];
 
-			for await (const event of stream) {
-				if (
-					event?.mergeMessageBody?.message?.data?.type === MessageType.CAST_ADD
-				) {
-					const message = event?.mergeMessageBody?.message as CastAddMessage;
-					const { data } = message;
-					if (message && data?.castAddBody) {
-						if (streamingFids.includes(data.fid)) {
-							const hash: `0x${string}` = `0x${Buffer.from(message.hash).toString("hex")}`;
-							const cast = await getCastById(data.fid, hash);
-							if (cast) {
-								try {
-									upsertCasts([cast]); // don't have to await!
-								} catch (error) {
-									console.error(
-										"Error upserting single cast:",
-										error instanceof Error
-											? error.message
-											: JSON.stringify(error),
-									);
+				for await (const event of stream) {
+					if (
+						event?.mergeMessageBody?.message?.data?.type ===
+						MessageType.CAST_ADD
+					) {
+						const message = event?.mergeMessageBody?.message as CastAddMessage;
+						const { data } = message;
+						if (message && data?.castAddBody) {
+							if (streamingFids.includes(data.fid)) {
+								const hash: `0x${string}` = `0x${Buffer.from(message.hash).toString("hex")}`;
+								const cast = await getCastById(data.fid, hash);
+								if (cast) {
+									try {
+										upsertCasts([cast]); // don't have to await!
+									} catch (error) {
+										console.error(
+											"Error upserting single cast:",
+											error instanceof Error
+												? error.message
+												: JSON.stringify(error),
+										);
+									}
 								}
+								const unixTimestampMS =
+									(data.timestamp + FARCASTER_EPOCH) * 1000;
+								const timestampStr = new Date(unixTimestampMS).toISOString();
+								const textDisplay =
+									(data.castAddBody.text?.length ?? 0) > 100
+										? `${data.castAddBody.text.slice(0, 100)}...`
+										: data.castAddBody.text;
+								VERBOSE_LOGGING &&
+									console.log(`[${timestampStr}] ${data.fid}: ${textDisplay}`);
 							}
-							const unixTimestampMS = (data.timestamp + FARCASTER_EPOCH) * 1000;
-							const timestampStr = new Date(unixTimestampMS).toISOString();
-							const textDisplay =
-								(data.castAddBody.text?.length ?? 0) > 100
-									? `${data.castAddBody.text.slice(0, 100)}...`
-									: data.castAddBody.text;
-							VERBOSE_LOGGING &&
-								console.log(`[${timestampStr}] ${data.fid}: ${textDisplay}`);
 						}
 					}
 				}
 			}
-		}
 
-		client.close();
-	}
-});
+			client.close();
+		}
+	});
 
 const getCastFromAddMessage = async (
 	cast: CastAddMessage,
