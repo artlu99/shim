@@ -48,9 +48,11 @@ new Elysia()
 	.use(
 		cron({
 			name: "heartbeat",
-			pattern: "0 */5 * * * *", // every 5 minutes
+			pattern: "0 */1 * * * *", // every 1 minute
 			run() {
-				console.log("Heartbeat");
+				const memoryUsage = process.memoryUsage();
+				const rss = Math.round(memoryUsage.rss / 1024 / 1024);
+				console.log(`Resident Set Size: ${rss}MB`);
 			},
 		}),
 	)
