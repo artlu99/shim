@@ -11,7 +11,7 @@ import {
 	FEED_DEFAULT_PAGE_SIZE,
 	VERBOSE_LOGGING,
 } from "../constants";
-import { streamingFids } from "../static/artlu";
+import { livenessFids } from "../static/artlu";
 import type { Cast } from "../types";
 import type { CastAddMessage } from "./farcaster-types";
 import { hydrateText } from "./hydration";
@@ -57,7 +57,7 @@ DO_STREAM &&
 						const message = event?.mergeMessageBody?.message as CastAddMessage;
 						const { data } = message;
 						if (message && data?.castAddBody) {
-							if (streamingFids.includes(data.fid)) {
+							if (livenessFids.includes(data.fid)) {
 								const hash: `0x${string}` = `0x${Buffer.from(message.hash).toString("hex")}`;
 								const cast = await getCastById(data.fid, hash);
 								if (cast) {

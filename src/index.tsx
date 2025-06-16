@@ -16,7 +16,7 @@ import {
 } from "./routes/feed";
 import { postRefresh, processFids } from "./routes/refresh";
 import { stats } from "./routes/stats";
-import { streamingFids } from "./static/artlu";
+import { livenessFids } from "./static/artlu";
 
 dotenvConfig();
 
@@ -38,17 +38,17 @@ new Elysia()
 	.get("/health", () => "OK")
 	.use(
 		cron({
-			name: "heartbeat",
-			pattern: "0 0 */2 * * *", // every 2 hours
+			name: "refresh-fids",
+			pattern: "0 0 */12 * * *", // every 12 hours
 			run() {
-				processFids(streamingFids);
+				processFids(livenessFids);
 			},
 		}),
 	)
 	.use(
 		cron({
 			name: "heartbeat",
-			pattern: "0 */1 * * * *", // every 1 minute
+			pattern: "0 0 */2 * * *", // every 2 hours
 			run() {
 				const memoryUsage = process.memoryUsage();
 				const rss = Math.round(memoryUsage.rss / 1024 / 1024);
