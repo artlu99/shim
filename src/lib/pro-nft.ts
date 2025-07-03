@@ -1,11 +1,37 @@
+import { Kysely } from "kysely";
+import { NeonDialect } from "kysely-neon";
+import invariant from "tiny-invariant";
 import { csv as dwr } from "../static/dwr";
 import { csv as mvr } from "../static/mvr";
 
-const crew = [
-	{ fid: 15983, order: 10002 }, // jacek
-	{ fid: 3, order: 10007 }, // dwr.eth
-	{ fid: 2, order: 10008 }, // v
-];
+interface PonderIndexedEvents {
+	purchaseTierEvent: {
+		id: string;
+		fid: number;
+		tier: number;
+		for_days: number;
+		payer: string;
+		block_number: number;
+		block_timestamp: number;
+		transaction_hash: string;
+	};
+}
+
+let dbInstance: Kysely<PonderIndexedEvents> | null = null;
+const db = () => {
+	if (!dbInstance) {
+		invariant(
+			process.env.DATABASE_URL_PRO_NFT,
+			"PONDER_INDEXED_EVENTS_DATABASE_URL is not set",
+		);
+		dbInstance = new Kysely<PonderIndexedEvents>({
+			dialect: new NeonDialect({
+				connectionString: process.env.DATABASE_URL_PRO_NFT,
+			}),
+		});
+	}
+	return dbInstance;
+};
 
 interface ProNftDetails {
 	fid: number;
@@ -13,12 +39,9 @@ interface ProNftDetails {
 	timestamp: number;
 }
 
-export const getProNftDetails = (fid: number): ProNftDetails | undefined => {
-	const proCrastinators = crew.find((p) => p.fid === fid);
-	if (proCrastinators) {
-		return { ...proCrastinators, timestamp: 0 };
-	}
-
+export const getProNftDetails = async (
+	fid: number,
+): Promise<ProNftDetails | undefined> => {
 	const above10k = mvr
 		.split("\n")
 		.map((l, idx) => {
@@ -35,7 +58,7 @@ export const getProNftDetails = (fid: number): ProNftDetails | undefined => {
 		return above10k;
 	}
 
-	return dwr
+	const snapshotCsv = dwr
 		.split("\n")
 		.filter((line) => line.includes(`,${fid},`))
 		.map((line) => line.split(","))
@@ -48,4 +71,23 @@ export const getProNftDetails = (fid: number): ProNftDetails | undefined => {
 			return d;
 		})
 		.find((line) => line.fid === fid);
+	if (snapshotCsv) {
+		return snapshotCsv;
+	}
+
+	const events = await db()
+		.selectFrom("purchaseTierEvent")
+		.selectAll()
+		.where("fid", "=", fid)
+		.executeTakeFirst();
+	if (!events) {
+		return undefined;
+	}
+
+	const ret = {
+		fid: Number(events.fid),
+		order: Number(events.block_number),
+		timestamp: Number(events.block_timestamp),
+	};
+	return ret;
 };

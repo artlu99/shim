@@ -8,7 +8,7 @@ export const getUserByFid = async (fid: number) => {
 
 	const primaryAddress = await getUserPrimaryAddress(fid);
 
-	const proNftDetails = getProNftDetails(fid);
+	const proNftDetails = await getProNftDetails(fid);
 
 	const user: User = {
 		fid,
