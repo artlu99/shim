@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { URI_SEARCH_LOOKBACK } from "../constants";
-import { getFidByUsername } from "../lib/fsu";
+import { getHubFidByUsername } from "../lib/hub-api";
 import { getCastById, getCastsByFid } from "../lib/hub-grpc";
 import { getUserByFid } from "../lib/hydration";
 import { getCastByShortHash } from "../lib/postgres";
@@ -10,11 +10,11 @@ import { type Cast, CastSchema } from "../types";
 export const getCastByWarpcastUri = new Elysia().get(
 	"/wc/:username/:shortHash",
 	async ({ params: { username, shortHash } }) => {
-		const fid = await getFidByUsername(username);
+		const fid = await getHubFidByUsername(username);
 		if (!fid) {
 			return {
 				success: false,
-				error: "getFidByUsername: Username not found",
+				error: "getHubFidByUsername: Username not found",
 			};
 		}
 

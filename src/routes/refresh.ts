@@ -5,8 +5,7 @@ import {
 	REFRESH_CASTS_SIZE,
 	REFRESH_PARALLEL_BATCHES,
 } from "../constants";
-import { getFidByUsername } from "../lib/fsu";
-import { getFollowingByFid } from "../lib/hub-api";
+import { getFollowingByFid, getHubFidByUsername } from "../lib/hub-api";
 import { getCastsByFid } from "../lib/hub-grpc";
 
 export const processFids = async (allFids: number[]) => {
@@ -53,7 +52,7 @@ export const postRefresh = new Elysia().post(
 		// Get following FIDs if username is provided
 		const allFids = new Set(fids);
 		if (username) {
-			const fid = await getFidByUsername(username);
+			const fid = await getHubFidByUsername(username);
 			if (!fid) {
 				return {
 					success: false,

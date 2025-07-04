@@ -1,17 +1,17 @@
 import { Elysia, t } from "elysia";
-import { getFidByUsername } from "../lib/fsu";
+import { getHubFidByUsername } from "../lib/hub-api";
 import { getCastsByFid } from "../lib/hub-grpc";
 import { CastSchema } from "../types";
 
 export const getAllCastsAndRepliesByUsername = new Elysia().get(
 	"/:username/casts-and-replies",
 	async ({ params: { username }, query: { limit } }) => {
-		const fid = await getFidByUsername(username);
+		const fid = await getHubFidByUsername(username);
 
 		if (!fid) {
 			return {
 				success: false,
-				error: "getFidByUserName: User not found",
+				error: "getHubFidByUsername: User not found",
 			};
 		}
 

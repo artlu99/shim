@@ -1,6 +1,5 @@
 import { Elysia, t } from "elysia";
-import { getFidByUsername } from "../lib/fsu";
-import { getUsernameByFid } from "../lib/hub-api";
+import { getHubFidByUsername, getUsernameByFid } from "../lib/hub-api";
 import { getUserByFid } from "../lib/hydration";
 
 export const fu = new Elysia()
@@ -39,7 +38,7 @@ export const fu = new Elysia()
 	.get(
 		"/f/:username",
 		async ({ params: { username } }) => {
-			const fid = await getFidByUsername(username);
+			const fid = await getHubFidByUsername(username);
 			return {
 				success: true,
 				fid,

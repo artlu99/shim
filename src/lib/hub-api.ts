@@ -107,6 +107,25 @@ async function cachedFetcherPaginatedGet<T>(
 	return messages;
 }
 
+export const getHubFidByUsername = async (username: string) => {
+	try {
+		// typing is a white lie because it was deserialized over http
+		const res = await cachedFetcherGet<UserNameProof>(
+			`/v1/userNameProofByName?name=${username}`,
+			Ttl.LONG,
+		);
+		const fid = res.fid;
+		return fid;
+	} catch (error) {
+		console.error(
+			"Error fetching fid by username:",
+			username,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+		return undefined;
+	}
+}
+
 export const getHubUserByFid = async (fid: number) => {
 	try {
 		// typing is a white lie because it was deserialized over http
