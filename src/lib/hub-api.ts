@@ -195,7 +195,7 @@ export const getFollowingByFid = async (fid: number) => {
 	try {
 		const res = await cachedFetcherPaginatedGet<LinkAddMessage>(
 			`/v1/linksByFid?fid=${fid}&reverse=false&link_type=follow`,
-			Ttl.SHORT,
+			Ttl.FEED,
 			1000,
 			10,
 		);

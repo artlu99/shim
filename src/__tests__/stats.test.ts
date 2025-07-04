@@ -7,13 +7,16 @@ describe("Stats Routes", () => {
 
     describe("should get mutuals", () => {
         const testCases = [
-            { fid1: 3, fid2: 1689, expectedMutualsAtLeast: 800 },
+            { fid: 5650, expectedMutualsAtLeast: 109 }, // vitalik
+            { fid: 37, expectedMutualsAtLeast: 53 }, // balajis
+            { fid: 2, expectedMutualsAtLeast: 1000 }, // varun
+            { fid: 3, expectedMutualsAtLeast: 5200 }, // dwr
         ];
 
-        for (const { fid1, fid2, expectedMutualsAtLeast } of testCases) {
-            it(`should get mutuals for fids ${fid1} and ${fid2}`, async () => {
+        for (const { fid, expectedMutualsAtLeast } of testCases) {
+            it(`should get mutuals for fid ${fid}`, async () => {
                 const response = await app.handle(
-                    new Request(`http://localhost/mutuals/${fid1}/${fid2}`)
+                    new Request(`http://localhost/mutuals/${fid}`)
                 );
                 const data = await response.json();
 

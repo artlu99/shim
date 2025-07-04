@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { getFollowingByFid } from "../lib/hub-api";
+import { getMutuals } from "../lib/mutuals";
 
 describe("follows", () => {
     it("should get follows by fid", async () => {
@@ -16,3 +17,17 @@ describe("follows", () => {
         }
     });
 });
+
+describe("mutuals", () => {
+    it("vitalik and dwr should be mutuals", async () => {
+        const res = await getMutuals(5650);
+        expect(res.includes(3)).toBe(true);
+    })
+
+    it("v and artlu should not be mutuals", async () => {
+        const res = await getMutuals(2);
+        expect(res.includes(6546)).toBe(false);
+    })
+
+})
+

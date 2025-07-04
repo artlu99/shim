@@ -8,10 +8,17 @@ import { pluralize } from "./util";
 
 /*
 CREATE TABLE IF NOT EXISTS casts (
-    hash VARCHAR(44) NOT NULL PRIMARY KEY, -- 0x prefix + 42 hex chars
-    fid INTEGER NOT NULL,
-    timestamp VARCHAR(20) NOT NULL, -- Unix timestamp in milliseconds
-    deleted_at VARCHAR(20) -- Unix timestamp in milliseconds, nullable
+	hash VARCHAR(44) NOT NULL PRIMARY KEY, -- 0x prefix + 42 hex chars
+	fid INTEGER NOT NULL,
+	timestamp VARCHAR(20) NOT NULL, -- Unix timestamp in milliseconds
+	deleted_at VARCHAR(20) -- Unix timestamp in milliseconds, nullable
+);
+
+CREATE TABLE IF NOT EXISTS mutuals (
+	l_fid INTEGER NOT NULL,
+	h_fid INTEGER NOT NULL,
+	is_mutual BOOLEAN,
+	PRIMARY KEY (l_fid, h_fid)
 );
 */
 
@@ -21,6 +28,11 @@ interface Database {
 		fid: number;
 		timestamp: string;
 		deleted_at: string | null;
+	};
+	mutuals: {
+		l_fid: number;
+		h_fid: number;
+		is_mutual: boolean | null;
 	};
 }
 
@@ -176,4 +188,53 @@ export const getReverseChronFeed = async (
 		items: results,
 		nextCursor,
 	};
+};
+
+export const upsertMutuals = async ({ fids, is_mutual }: { fids: number[], is_mutual: boolean | null }) => {
+	invariant(fids.length === 2, "fids must be an array of two numbers");
+	invariant(fids[0] !== fids[1], "fids must be different");
+
+	const [l_fid, h_fid] = fids[0] < fids[1] ? fids : fids.reverse();
+	invariant(l_fid < h_fid, "l_fid must be less than h_fid");
+
+	await db()
+		.insertInto("mutuals")
+		.values({
+			l_fid,
+			h_fid,
+			is_mutual,
+		})
+		.onConflict((oc) =>
+			is_mutual === null
+				? oc.columns(["l_fid", "h_fid"]).doNothing()
+				: oc.columns(["l_fid", "h_fid"]).doUpdateSet({ is_mutual })
+		)
+		.execute();
+};
+
+export const getMutualsByFid = async (fid: number) => {
+	const mutuals = await db()
+		.selectFrom("mutuals")
+		.select("l_fid as fid")
+		.where("h_fid", "=", fid)
+		.where("is_mutual", "is", true)
+		.unionAll(
+			db()
+				.selectFrom("mutuals")
+				.select("h_fid as fid")
+				.where("l_fid", "=", fid)
+				.where("is_mutual", "is", true)
+		)
+		.execute();
+
+	return mutuals;
+};
+
+export const getUnprocessedMutuals = async () => {
+	const mutuals = await db()
+		.selectFrom("mutuals")
+		.select(["l_fid", "h_fid"])
+		.where("is_mutual", "is", null)
+		.execute();
+	return mutuals.map((m) => [m.l_fid, m.h_fid]);
 };
