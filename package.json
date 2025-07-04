@@ -2,6 +2,7 @@
 	"scripts": {
 		"backfill": "bun run src/scripts/backfill.ts",
 		"test": "bun test --watch",
+		"test:coverage": "bun test --coverage --coverage-reporter=text",
 		"dev": "bun run --watch src/index.tsx",
 		"start": "NODE_ENV=production bun src/index.tsx"
 	},

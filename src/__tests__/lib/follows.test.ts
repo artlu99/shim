@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { getFollowingByFid } from "../lib/hub-api";
-import { getMutuals } from "../lib/mutuals";
+import { getFollowingByFid } from "../../lib/hub-api";
+import { getMutuals } from "../../lib/mutuals";
 
 describe("follows", () => {
     it("should get follows by fid", async () => {
