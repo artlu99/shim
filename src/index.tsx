@@ -14,6 +14,7 @@ import {
 	getReverseChronChannelFeed,
 	postReverseChronFeed,
 } from "./routes/feed";
+import { mutuals } from "./routes/live";
 import { postRefresh, processFids } from "./routes/refresh";
 import { stats } from "./routes/stats";
 import { livenessFids } from "./static/artlu";
@@ -27,6 +28,7 @@ new Elysia()
 	.use(cors())
 	.use(docs)
 	.use(stats)
+	.use(mutuals)
 	.use(fu)
 	.use(getAllCastsAndRepliesByUsername)
 	.use(getCastByFidAndHash)
