@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Elysia } from "elysia";
-import { mutuals } from "../../routes/live";
+import { mutuals } from "../../routes/mutuals";
 
 describe("Mutuals Routes", () => {
     const app = new Elysia().use(mutuals);

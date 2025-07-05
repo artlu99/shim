@@ -14,7 +14,7 @@ import {
 	getReverseChronChannelFeed,
 	postReverseChronFeed,
 } from "./routes/feed";
-import { mutuals } from "./routes/live";
+import { mutuals } from "./routes/mutuals";
 import { postRefresh, processFids } from "./routes/refresh";
 import { stats } from "./routes/stats";
 import { livenessFids } from "./static/artlu";

@@ -19,13 +19,6 @@ CREATE TABLE IF NOT EXISTS follows (
 	target INTEGER NOT NULL,
 	PRIMARY KEY (fid, target)
 );
-
-CREATE TABLE IF NOT EXISTS mutuals (
-	l_fid INTEGER NOT NULL,
-	h_fid INTEGER NOT NULL,
-	is_mutual BOOLEAN,
-	PRIMARY KEY (l_fid, h_fid)
-);
 */
 
 interface Database {
@@ -38,11 +31,6 @@ interface Database {
 	follows: {
 		fid: number;
 		target: number;
-	};
-	mutuals: {
-		l_fid: number;
-		h_fid: number;
-		is_mutual: boolean | null;
 	};
 }
 
@@ -200,45 +188,6 @@ export const getReverseChronFeed = async (
 	};
 };
 
-export const upsertMutuals = async ({ fids, is_mutual }: { fids: number[], is_mutual: boolean | null }) => {
-	invariant(fids.length === 2, "fids must be an array of two numbers");
-	invariant(fids[0] !== fids[1], "fids must be different");
-
-	const [l_fid, h_fid] = fids[0] < fids[1] ? fids : fids.reverse();
-	invariant(l_fid < h_fid, "l_fid must be less than h_fid");
-
-	await db()
-		.insertInto("mutuals")
-		.values({
-			l_fid,
-			h_fid,
-			is_mutual,
-		})
-		.onConflict((oc) =>
-			is_mutual === null
-				? oc.columns(["l_fid", "h_fid"]).doNothing()
-				: oc.columns(["l_fid", "h_fid"]).doUpdateSet({ is_mutual })
-		)
-		.execute();
-};
-
-export const getMutualsByFid = async (fid: number) => {
-	const mutuals = await db()
-		.selectFrom("mutuals")
-		.select("l_fid as fid")
-		.where("h_fid", "=", fid)
-		.where("is_mutual", "is", true)
-		.unionAll(
-			db()
-				.selectFrom("mutuals")
-				.select("h_fid as fid")
-				.where("l_fid", "=", fid)
-				.where("is_mutual", "is", true)
-		)
-		.execute();
-
-	return mutuals;
-};
 
 export const insertFollows = async (
 	followsToInsert: { fid: number; target: number }[]
@@ -272,13 +221,4 @@ export const getMutualsForFid = async (fid: number) => {
 		.execute();
 
 	return mutuals;
-};
-
-export const getUnprocessedMutuals = async () => {
-	const mutuals = await db()
-		.selectFrom("mutuals")
-		.select(["l_fid", "h_fid"])
-		.where("is_mutual", "is", null)
-		.execute();
-	return mutuals.map((m) => [m.l_fid, m.h_fid]);
 };
