@@ -7,13 +7,13 @@ describe("Mutuals Routes", () => {
 
     describe("should check mutuals", () => {
         const testCases = [
-            { fid: 5650, expectedMutualsAtLeast: 100 }, // vitalik
-            { fid: 37, expectedMutualsAtLeast: 50 }, // balajis
-            { fid: 2, expectedMutualsAtLeast: 1400 }, // varun
-            { fid: 3, expectedMutualsAtLeast: 3700 }, // dwr
+            { fid: 5650, expectedMutuals: 109 }, // vitalik
+            { fid: 37, expectedMutuals: 53 }, // balajis
+            { fid: 2, expectedMutuals: 1490 }, // varun
+            { fid: 3, expectedMutuals: 3942 }, // dwr
         ];
 
-        for (const { fid, expectedMutualsAtLeast } of testCases) {
+        for (const { fid, expectedMutuals } of testCases) {
             it(`should get mutuals for fid ${fid}`, async () => {
                 const response = await app.handle(
                     new Request(`http://localhost/mutuals/${fid}`)
@@ -22,8 +22,8 @@ describe("Mutuals Routes", () => {
 
                 expect(response.status).toBe(200);
                 expect(data.success).toBe(true);
-                expect(data.mutuals.count).toBeGreaterThanOrEqual(expectedMutualsAtLeast);
-                expect(data.mutuals.fids.length).toBeGreaterThanOrEqual(expectedMutualsAtLeast);
+                expect(data.mutuals.count).toBe(expectedMutuals);
+                expect(data.mutuals.fids.length).toBeGreaterThanOrEqual(expectedMutuals);
             });
         }
     });
