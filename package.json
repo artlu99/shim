@@ -20,12 +20,14 @@
 		"itty-fetcher": "^0.9.4",
 		"kysely": "^0.28.2",
 		"kysely-neon": "^1.3.0",
+		"progress": "^2.0.3",
 		"radash": "^12.1.0",
 		"tiny-invariant": "^1.3.3"
 	},
 	"devDependencies": {
 		"@farcaster/core": "^0.16.5",
 		"@scalar/types": "^0.1.16",
-		"@types/bun": "^1.2.15"
+		"@types/bun": "^1.2.15",
+		"@types/progress": "^2.0.7"
 	}
 }
