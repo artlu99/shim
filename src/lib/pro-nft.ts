@@ -3,6 +3,7 @@ import { NeonDialect } from "kysely-neon";
 import invariant from "tiny-invariant";
 import { csv as dwr } from "../static/dwr";
 import { csv as mvr } from "../static/mvr";
+import type { ProNftDetails } from "../types";
 
 interface PonderIndexedEvents {
 	purchaseTierEvent: {
@@ -32,12 +33,6 @@ const db = () => {
 	}
 	return dbInstance;
 };
-
-interface ProNftDetails {
-	fid: number;
-	order: number;
-	timestamp: number;
-}
 
 export const getProNftDetails = async (
 	fid: number,

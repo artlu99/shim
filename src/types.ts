@@ -73,3 +73,9 @@ export interface HydratedCast extends Cast {
 	channel?: Channel;
 	sentBy?: string | null;
 }
+
+export interface ProNftDetails {
+	fid: number;
+	order: number;
+	timestamp: number;
+}
