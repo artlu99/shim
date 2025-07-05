@@ -14,6 +14,12 @@ CREATE TABLE IF NOT EXISTS casts (
 	deleted_at VARCHAR(20) -- Unix timestamp in milliseconds, nullable
 );
 
+CREATE TABLE IF NOT EXISTS follows (
+	fid INTEGER NOT NULL,
+	target INTEGER NOT NULL,
+	PRIMARY KEY (fid, target)
+);
+
 CREATE TABLE IF NOT EXISTS mutuals (
 	l_fid INTEGER NOT NULL,
 	h_fid INTEGER NOT NULL,
@@ -28,6 +34,10 @@ interface Database {
 		fid: number;
 		timestamp: string;
 		deleted_at: string | null;
+	};
+	follows: {
+		fid: number;
+		target: number;
 	};
 	mutuals: {
 		l_fid: number;
@@ -225,6 +235,40 @@ export const getMutualsByFid = async (fid: number) => {
 				.where("l_fid", "=", fid)
 				.where("is_mutual", "is", true)
 		)
+		.execute();
+
+	return mutuals;
+};
+
+export const insertFollows = async (
+	followsToInsert: { fid: number; target: number }[]
+): Promise<number> => {
+	const fid = followsToInsert[0].fid;
+	try {
+		await db().deleteFrom("follows").where("fid", "=", fid).execute();
+
+		const result = await db()
+			.insertInto("follows")
+			.values(followsToInsert.map(({ target }) => ({ fid, target })))
+			.onConflict((oc) => oc.columns(["fid", "target"]).doNothing())
+			.execute();
+
+		return Number(result[0]?.numInsertedOrUpdatedRows ?? 0);
+	} catch (e) {
+		console.error(`Error upserting follows for fid ${fid}:`, e);
+		return 0;
+	}
+};
+
+export const getMutualsForFid = async (fid: number) => {
+	const mutuals = await db()
+		.selectFrom("follows as f1")
+		.innerJoin("follows as f2", (join) =>
+			join.onRef("f1.fid", "=", "f2.target").onRef("f1.target", "=", "f2.fid"),
+		)
+		.select("f1.target as fid")
+		.where("f1.fid", "=", fid)
+		.where("f2.fid", "!=", fid)
 		.execute();
 
 	return mutuals;

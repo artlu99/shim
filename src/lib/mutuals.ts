@@ -43,15 +43,15 @@ export const generateMutualsToCheck = async (fid: number): Promise<void> => {
 
     try {
         for (const followingFid of following) {
-            bar.tick({ message: `Processing ${fid} -> ${followingFid}` });
-
             if (fid === followingFid) {
                 skippedCount++;
+                bar.tick({ message: `Skipped self-follow ${followingFid}` });
                 continue;
             }
 
             await upsertMutuals({ fids: [fid, followingFid], is_mutual: null });
             processedCount++;
+            bar.tick({ message: `Processed ${fid} -> ${followingFid}` });
         }
     } finally {
         console.log = originalLog;
@@ -105,7 +105,6 @@ export const processUnprocessedMutuals = async (reverse = false): Promise<void> 
     try {
         for (let idx = 0; idx < toProcessMutuals.length; idx++) {
             const mutuals = toProcessMutuals[idx];
-            bar.tick({ message: `Processing ${mutuals[0]} and ${mutuals[1]}` });
 
             try {
                 await updateMutuals(mutuals);
@@ -114,6 +113,8 @@ export const processUnprocessedMutuals = async (reverse = false): Promise<void> 
                 errorCount++;
                 originalError(`Error processing mutuals ${mutuals[0]} and ${mutuals[1]}:`, error);
             }
+
+            bar.tick({ message: `Processed ${mutuals[0]} and ${mutuals[1]}` });
         }
     } finally {
         console.log = originalLog;
