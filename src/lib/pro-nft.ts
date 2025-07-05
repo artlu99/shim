@@ -39,8 +39,13 @@ export const getProNftDetails = async (
 ): Promise<ProNftDetails | undefined> => {
 	const above10k = mvr
 		.split("\n")
+		.filter((line) => line.trim() !== "") // Skip empty lines
 		.map((l, idx) => {
 			const line = l.split(`\",\"`);
+			// Skip lines that don't have enough fields
+			if (line.length < 7) {
+				return null;
+			}
 			const d: ProNftDetails = {
 				fid: Number(line[0].replace(`\"`, "")),
 				order: 10000 + idx,
@@ -48,6 +53,7 @@ export const getProNftDetails = async (
 			};
 			return d;
 		})
+		.filter((item): item is ProNftDetails => item !== null) // Filter out null items
 		.find((line) => line.fid === fid);
 	if (above10k) {
 		return above10k;
@@ -55,8 +61,10 @@ export const getProNftDetails = async (
 
 	const snapshotCsv = dwr
 		.split("\n")
+		.filter((line) => line.trim() !== "") // Skip empty lines
 		.filter((line) => line.includes(`,${fid},`))
 		.map((line) => line.split(","))
+		.filter((line) => line.length >= 3) // Skip lines that don't have enough fields
 		.map((line) => {
 			const d: ProNftDetails = {
 				fid: Number(line[1]),
