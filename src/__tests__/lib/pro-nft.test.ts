@@ -1,6 +1,5 @@
-import { describe, expect, it, mock, beforeEach } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { getProNftDetails } from "../../lib/pro-nft";
-import type { ProNftDetails } from "../../types";
 
 // Mock the dependencies
 const mockDbInstance = mock(() => ({
@@ -16,23 +15,6 @@ const mockDbInstance = mock(() => ({
 const mockKysely = mock(() => mockDbInstance());
 const mockNeonDialect = mock(() => ({}));
 
-// Mock the modules
-mock.module("kysely", () => ({
-    Kysely: mockKysely,
-}));
-
-mock.module("kysely-neon", () => ({
-    NeonDialect: mockNeonDialect,
-}));
-
-mock.module("tiny-invariant", () => ({
-    default: mock((condition: boolean, message: string) => {
-        if (!condition) {
-            throw new Error(message);
-        }
-    }),
-}));
-
 // Mock the static CSV data
 const mockMvrCsv = `"fid","username","display_name","address","transaction_hash","block_number","timestamp","follower_count","sequence","following_count","verified_accounts","score","spam_label","spam_label_updated","rewards_score","rewards_cents","purchase_type"
 "1077239","!1077239","richerjack","0x6fba1340acd896eddf39b84685d293627089c07b","0x0bdcc740100a6e737b303c56066ca8dd5559b8661b0389b8f193857eb5878156","30793495","1748376337","0","10001","0",,"0.11",,,"0","0","usdc"
@@ -46,20 +28,44 @@ const mockDwrCsv = `subscriber_number,fid,created_at_timestamp
 4,312016,1748376064.00024
 5,583095,1748376097.74266`;
 
-mock.module("../../static/mvr", () => ({
-    csv: mockMvrCsv,
-}));
-
-mock.module("../../static/dwr", () => ({
-    csv: mockDwrCsv,
-}));
-
 describe("Pro NFT Functions", () => {
+    beforeAll(() => {
+        // Mock the modules
+        mock.module("kysely", () => ({
+            Kysely: mockKysely,
+        }));
+
+        mock.module("kysely-neon", () => ({
+            NeonDialect: mockNeonDialect,
+        }));
+
+        mock.module("tiny-invariant", () => ({
+            default: mock((condition: boolean, message: string) => {
+                if (!condition) {
+                    throw new Error(message);
+                }
+            }),
+        }));
+
+        mock.module("../../static/mvr", () => ({
+            csv: mockMvrCsv,
+        }));
+
+        mock.module("../../static/dwr", () => ({
+            csv: mockDwrCsv,
+        }));
+    });
+
     beforeEach(() => {
         // Reset all mocks
         mockDbInstance.mockClear();
         mockKysely.mockClear();
         mockNeonDialect.mockClear();
+    });
+
+    afterAll(() => {
+        // Restore all mocks
+        mock.restore();
     });
 
     describe("getProNftDetails", () => {

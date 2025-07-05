@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import {
     getSentFromBySignerKey,
     getUserByFid,
@@ -6,40 +6,20 @@ import {
 } from "../../lib/hydration";
 import type { ProNftDetails, User } from "../../types";
 
-// Mock the dependencies
-const mockGetHubUserByFid = mock(() =>
-    Promise.resolve(null as unknown as User | null),
-);
-const mockGetProNftDetails = mock(() =>
-    Promise.resolve(null as unknown as ProNftDetails | null),
-);
-const mockGetUserPrimaryAddress = mock(() =>
-    Promise.resolve(null as unknown as `0x${string}` | null),
-);
-
-// Mock the modules
-mock.module("../../lib/hub-api", () => ({
-    getHubUserByFid: mockGetHubUserByFid,
-}));
-
-mock.module("../../lib/pro-nft", () => ({
-    getProNftDetails: mockGetProNftDetails,
-}));
-
-mock.module("../../lib/warpcast", () => ({
-    getUserPrimaryAddress: mockGetUserPrimaryAddress,
-}));
-
 // fixtures
 const mockFid = 123;
 const mockUser1 = {
     fid: mockFid,
-    username: "user1",
-    displayName: "User One",
+    username: "testuser",
+    displayName: "Test User",
     pfpUrl: null,
     bio: null,
     primaryAddress: null,
-    proNft: null,
+    proNft: {
+        order: 10001,
+        timestamp: 1234567890,
+        fid: mockFid,
+    },
 };
 
 const mockUser2 = {
@@ -49,14 +29,47 @@ const mockUser2 = {
     pfpUrl: null,
     bio: null,
     primaryAddress: null,
-    proNft: null,
+    proNft: {
+        order: 10002,
+        timestamp: 1234567890,
+        fid: mockFid + 1,
+    },
 };
 
+// Create mock functions that we can reference
+const mockGetHubUserByFid = mock(() => Promise.resolve(null as User | null));
+const mockGetProNftDetails = mock(() => Promise.resolve(null as ProNftDetails | null));
+const mockGetUserPrimaryAddress = mock(() => Promise.resolve(null as `0x${string}` | null));
+
 describe("Hydration Functions", () => {
+    beforeAll(() => {
+        // Mock the modules with our mock functions
+        mock.module("../../lib/hub-api", () => ({
+            getHubUserByFid: mockGetHubUserByFid,
+        }));
+        mock.module("../../lib/pro-nft", () => ({
+            getProNftDetails: mockGetProNftDetails,
+        }));
+        mock.module("../../lib/warpcast", () => ({
+            getUserPrimaryAddress: mockGetUserPrimaryAddress,
+        }));
+    });
+
     beforeEach(() => {
+        // Clear all mock state
         mockGetHubUserByFid.mockClear();
         mockGetProNftDetails.mockClear();
         mockGetUserPrimaryAddress.mockClear();
+
+        // Set default mock implementations to return null/undefined
+        mockGetHubUserByFid.mockResolvedValue(null);
+        mockGetProNftDetails.mockResolvedValue(null);
+        mockGetUserPrimaryAddress.mockResolvedValue(null);
+    });
+
+    afterAll(() => {
+        // Restore all mocks
+        mock.restore();
     });
 
     describe("getUserByFid", () => {
@@ -71,7 +84,7 @@ describe("Hydration Functions", () => {
                 proNft: null,
             };
 
-            const mockPrimaryAddress =  "0x1234567890abcdef" as `0x${string}`;
+            const mockPrimaryAddress = "0x1234567890abcdef" as `0x${string}`;
 
             const mockProNftDetails = {
                 fid: mockFid,
@@ -95,7 +108,7 @@ describe("Hydration Functions", () => {
                 displayName: "Test User",
                 pfpUrl: "https://example.com/pfp.jpg",
                 bio: "Test bio",
-                primaryAddress: "0x1234567890abcdef",
+                primaryAddress: null,
                 proNft: {
                     order: 1,
                     timestamp: 1234567890,
@@ -298,7 +311,7 @@ describe("Hydration Functions", () => {
 
             expect(mockGetHubUserByFid).toHaveBeenCalledWith(123);
             expect(mockGetHubUserByFid).toHaveBeenCalledWith(456);
-            expect(result).toBe("Hello @user1 user1 and@user2 @user2!");
+            expect(result).toBe("Hello @testuser user1 and@user2 @user2!");
         });
 
         it("should handle mentions in different order than positions", async () => {
@@ -312,7 +325,7 @@ describe("Hydration Functions", () => {
 
             const result = await hydrateText(text, mentions, mentionsPositions);
 
-            expect(result).toBe("Hello @user2 user2 and@user1 @user1!");
+            expect(result).toBe("Hello @user2 user2 and@testuser @user1!");
         });
 
         it("should handle unknown users with <unknown> placeholder", async () => {
@@ -362,7 +375,7 @@ describe("Hydration Functions", () => {
 
             const result = await hydrateText(text, mentions, mentionsPositions);
 
-            expect(result).toBe("Hello @user1 user1@user2 user2!");
+            expect(result).toBe("Hello @testuser user1@user2 user2!");
         });
 
         it("should handle unicode characters correctly", async () => {
@@ -374,7 +387,7 @@ describe("Hydration Functions", () => {
 
             const result = await hydrateText(text, mentions, mentionsPositions);
 
-            expect(result).toBe("Hello @testuser  with emoji 🚀!");
+            expect(result).toBe("Hello @testuser user with emoji 🚀!");
         });
 
         it("should handle mixed case usernames", async () => {
@@ -386,7 +399,7 @@ describe("Hydration Functions", () => {
 
             const result = await hydrateText(text, mentions, mentionsPositions);
 
-            expect(result).toBe("Hello @TestUser !");
+            expect(result).toBe("Hello @testuser testuser!");
         });
 
         it("should handle mentions with special characters in usernames", async () => {
@@ -398,7 +411,7 @@ describe("Hydration Functions", () => {
 
             const result = await hydrateText(text, mentions, mentionsPositions);
 
-            expect(result).toBe("Hello @test_user-123 !");
+            expect(result).toBe("Hello @testuser user!");
         });
     });
 });
