@@ -1,16 +1,17 @@
 import ProgressBar from 'progress';
+import { sort } from "radash";
 import invariant from "tiny-invariant";
 import { VERBOSE_LOGGING } from './../constants';
 import { getFollowingByFid } from "./hub-api";
 import { getMutualsByFid, getUnprocessedMutuals, upsertMutuals } from "./postgres";
 
-export const getMutuals = async (fid: number) => {
+export const getMutuals = async (fid: number): Promise<number[]> => {
     const mutuals = await getMutualsByFid(fid);
-    return mutuals.map((m) => m.fid);
+    return sort(mutuals, (m) => m.fid).map((m) => m.fid);
 };
 
-export const generateMutualsToCheck = async (fid: number) => {
-    const following = await getFollowingByFid(fid);
+export const generateMutualsToCheck = async (fid: number): Promise<void> => {
+    const following = sort(await getFollowingByFid(fid), (f) => f);
     VERBOSE_LOGGING && console.log(`fid ${fid} is following ${following.length} fids`);
 
     if (following.length === 0) {
@@ -68,10 +69,12 @@ export const generateMutualsToCheck = async (fid: number) => {
     console.log(`✅ Generated ${processedCount} mutuals to check (skipped ${skippedCount} self-follows) in ${elapsed}`);
 };
 
-export const processUnprocessedMutuals = async () => {
-    const unprocessedMutuals = await getUnprocessedMutuals()
+export const processUnprocessedMutuals = async (reverse = false): Promise<void> => {
+    const unprocessedMutuals = await getUnprocessedMutuals();
+    const orderedUnprocessedMutuals = sort(sort(unprocessedMutuals, (m) => m[1]), (m) => m[0]);
+    const toProcessMutuals = reverse ? orderedUnprocessedMutuals.reverse() : orderedUnprocessedMutuals;
 
-    if (unprocessedMutuals.length === 0) {
+    if (toProcessMutuals.length === 0) {
         console.log('No unprocessed mutuals found');
         return;
     }
@@ -81,7 +84,7 @@ export const processUnprocessedMutuals = async () => {
     const bar = new ProgressBar(
         'Processing [:bar] :percent | :current/:total | :rate it/s | ETA: :etas | :message',
         {
-            total: unprocessedMutuals.length,
+            total: toProcessMutuals.length,
             width: 30,
             complete: '=',
             incomplete: ' ',
@@ -100,8 +103,8 @@ export const processUnprocessedMutuals = async () => {
     let errorCount = 0;
 
     try {
-        for (let idx = 0; idx < unprocessedMutuals.length; idx++) {
-            const mutuals = unprocessedMutuals[idx];
+        for (let idx = 0; idx < toProcessMutuals.length; idx++) {
+            const mutuals = toProcessMutuals[idx];
             bar.tick({ message: `Processing ${mutuals[0]} and ${mutuals[1]}` });
 
             try {
@@ -132,7 +135,7 @@ export const processUnprocessedMutuals = async () => {
     }
 };
 
-export const updateMutuals = async (fids: number[]) => {
+export const updateMutuals = async (fids: number[]): Promise<boolean> => {
     invariant(fids.length === 2, "fids must be an array of two numbers");
     invariant(fids[0] !== fids[1], "fids must be different");
 
