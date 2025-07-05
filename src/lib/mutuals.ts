@@ -19,13 +19,14 @@ export const updateMutuals = async (fids: number[]): Promise<boolean> => {
 
     if (isMutual) {
         try {
-            await insertFollows([
-                ...follows1.map((target) => ({ fid: fid1, target })),
-                ...follows2.map((target) => ({ fid: fid2, target })),
-            ]);
-
+            await insertFollows(follows1.map((target) => ({ fid: fid1, target })));
         } catch (e) {
-            console.error(`Error inserting follows for ${fid1} and ${fid2}:`, e);
+            console.error(`Error inserting follows for ${fid1}:`, e);
+        }
+        try {
+            await insertFollows(follows2.map((target) => ({ fid: fid2, target })));
+        } catch (e) {
+            console.error(`Error inserting follows for ${fid2}:`, e);
         }
     }
 
