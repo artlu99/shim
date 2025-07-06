@@ -11,7 +11,6 @@ import type {
 	UserNameProof,
 } from "./farcaster-types";
 import redis, { Ttl } from "./redis";
-import { U } from "@upstash/redis/zmscore-DzNHSWxc";
 
 const hub = () => {
 	// snap, crackle, pop, pow

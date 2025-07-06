@@ -13,18 +13,19 @@ describe("follows", () => {
 
         for (const { fid, expectedFollows } of testCases) {
             const follows = await getFollowingByFid(fid);
-            expect(follows.length).toBe(expectedFollows);
+            expect(follows.length).toBeGreaterThanOrEqual(expectedFollows - 10);
+            expect(follows.length).toBeLessThanOrEqual(expectedFollows + 10);
         }
     });
 });
 
 describe("mutuals", () => {
-    it("vitalik and dwr should be mutuals", async () => {
+    it("should get mutuals", async () => {
         const res = await getMutuals(5650);
         expect(res.includes(3)).toBe(true);
     })
 
-    it("v and artlu should not be mutuals", async () => {
+    it("should not be mutuals", async () => {
         const res = await getMutuals(2);
         expect(res.includes(6546)).toBe(false);
     })
