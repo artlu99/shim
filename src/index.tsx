@@ -41,7 +41,7 @@ new Elysia()
 	.use(
 		cron({
 			name: "refresh-fids",
-			pattern: "0 0 */12 * * *", // every 12 hours
+			pattern: "0 8 * * * *", // every day at 8 am UTC
 			run() {
 				processFids(livenessFids);
 			},
@@ -50,7 +50,7 @@ new Elysia()
 	.use(
 		cron({
 			name: "heartbeat",
-			pattern: "0 0 */2 * * *", // every 2 hours
+			pattern: "0 0 */8 * * *", // every 8 hours
 			run() {
 				const memoryUsage = process.memoryUsage();
 				const rss = Math.round(memoryUsage.rss / 1024 / 1024);
