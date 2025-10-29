@@ -58,7 +58,12 @@ export interface User {
 	pfpUrl: string | null;
 	bio: string | null;
 	primaryAddress: `0x${string}` | null;
-	proNft: { order: number; timestamp: number } | null;
+	proNft: {
+		order: number;
+		subscribed_at: string;
+		expires_at: string;
+		status: "subscribed" | "unsubscribed"
+	} | null;
 }
 
 export interface Channel {
@@ -78,4 +83,5 @@ export interface ProNftDetails {
 	fid: number;
 	order: number;
 	timestamp: number;
+	expires: number;
 }

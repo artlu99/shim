@@ -50,6 +50,7 @@ export const getProNftDetails = async (
 				fid: Number(line[0].replace(`\"`, "")),
 				order: 10000 + idx,
 				timestamp: Number(line[6].replace('"', "")),
+				expires: 1781630383 // smart contract was deployed later
 			};
 			return d;
 		})
@@ -70,6 +71,7 @@ export const getProNftDetails = async (
 				fid: Number(line[1]),
 				order: Number(line[0]),
 				timestamp: Number(line[2]),
+				expires: 1781630383 // smart contract was deployed later
 			};
 			return d;
 		})
@@ -82,6 +84,8 @@ export const getProNftDetails = async (
 		.selectFrom("purchaseTierEvent")
 		.selectAll()
 		.where("fid", "=", fid)
+		.orderBy("block_timestamp", "desc")
+		.limit(1)
 		.executeTakeFirst();
 	if (!events) {
 		return undefined;
@@ -91,6 +95,7 @@ export const getProNftDetails = async (
 		fid: Number(events.fid),
 		order: Number(events.block_number),
 		timestamp: Number(events.block_timestamp),
+		expires: Number(events.block_timestamp) + 60 * 60 * 24 * Number(events.for_days), // for_days days from timestamp
 	};
 	return ret;
 };

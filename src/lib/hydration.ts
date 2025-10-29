@@ -18,7 +18,12 @@ export const getUserByFid = async (fid: number) => {
 		bio: hubUser?.bio ?? null,
 		primaryAddress: primaryAddress?.address ?? null,
 		proNft: proNftDetails
-			? { order: proNftDetails.order, timestamp: proNftDetails.timestamp }
+			? {
+				order: proNftDetails.order,
+				subscribed_at: new Date(proNftDetails.timestamp * 1000).toISOString(),
+				expires_at: new Date(proNftDetails.expires * 1000).toISOString(),
+				status: proNftDetails.expires > (Date.now() / 1000.0) ? "subscribed" : "unsubscribed"
+			}
 			: null,
 	};
 

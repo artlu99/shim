@@ -96,7 +96,15 @@ export const fu = new Elysia()
 										displayName: t.String(),
 										pfpUrl: t.String(),
 										primaryAddress: t.String(),
-										proNftOrder: t.Number(),
+										proNft: t.Nullable(t.Object({
+											order: t.Number(),
+											subscribed_at: t.String(),
+											expires_at: t.String(),
+											status: t.Enum({
+												subscribed: "subscribed",
+												unsubscribed: "unsubscribed",
+											}),
+										})),
 									}),
 								}),
 							},
