@@ -51,7 +51,7 @@ const CURSOR_SALT = 42069;
 
 const encodeCursor = (timestamp: string): string => {
 	// Convert timestamp to number, add salt, then back to string
-	const saltedTimestamp = (Number.parseInt(timestamp) + CURSOR_SALT).toString();
+	const saltedTimestamp = (Number.parseInt(timestamp, 10) + CURSOR_SALT).toString();
 	return `${CURSOR_VERSION}:${btoa(saltedTimestamp)}`;
 };
 
@@ -64,7 +64,7 @@ const decodeCursor = (cursor: string): string | undefined => {
 		}
 		// Decode base64, convert to number, subtract salt, then back to string
 		const saltedTimestamp = atob(encodedTimestamp);
-		return (Number.parseInt(saltedTimestamp) - CURSOR_SALT).toString();
+		return (Number.parseInt(saltedTimestamp, 10) - CURSOR_SALT).toString();
 	} catch (e) {
 		console.error("Invalid cursor format:", e);
 		return undefined;
@@ -207,18 +207,4 @@ export const insertFollows = async (
 		console.error(`Error upserting follows for fid ${fid}:`, e);
 		return 0;
 	}
-};
-
-export const getMutualsForFid = async (fid: number) => {
-	const mutuals = await db()
-		.selectFrom("follows as f1")
-		.innerJoin("follows as f2", (join) =>
-			join.onRef("f1.fid", "=", "f2.target").onRef("f1.target", "=", "f2.fid"),
-		)
-		.select("f1.target as fid")
-		.where("f1.fid", "=", fid)
-		.where("f2.fid", "!=", fid)
-		.execute();
-
-	return mutuals;
 };

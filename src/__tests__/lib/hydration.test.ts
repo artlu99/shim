@@ -17,7 +17,9 @@ const mockUser1 = {
     primaryAddress: null,
     proNft: {
         order: 10001,
-        timestamp: 1234567890,
+        subscribed_at: new Date(1234567890 * 1000).toISOString(),
+        expires_at: new Date(1234567891 * 1000).toISOString(),
+        status: "unsubscribed" as "unsubscribed" | "subscribed",
         fid: mockFid,
     },
 };
@@ -31,7 +33,9 @@ const mockUser2 = {
     primaryAddress: null,
     proNft: {
         order: 10002,
-        timestamp: 1234567890,
+        subscribed_at: new Date(1234567890 * 1000).toISOString(),
+        expires_at: new Date(1234567891 * 1000).toISOString(),
+        status: "unsubscribed" as "unsubscribed" | "subscribed",
         fid: mockFid + 1,
     },
 };
@@ -90,6 +94,7 @@ describe("Hydration Functions", () => {
                 fid: mockFid,
                 order: 1,
                 timestamp: 1234567890,
+                expires: 1234567891,
             };
 
             mockGetHubUserByFid.mockResolvedValue(mockHubUser);
@@ -111,7 +116,9 @@ describe("Hydration Functions", () => {
                 primaryAddress: null,
                 proNft: {
                     order: 1,
-                    timestamp: 1234567890,
+                    subscribed_at: new Date(1234567890 * 1000).toISOString(),
+                    expires_at: new Date(1234567891 * 1000).toISOString(),
+                    status: "unsubscribed" as "unsubscribed" | "subscribed",
                 },
             });
         });

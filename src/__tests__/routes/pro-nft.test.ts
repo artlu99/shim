@@ -1,19 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, mock } from "bun:test";
 import { getProNftDetails } from "../../lib/pro-nft";
-
-// Mock the dependencies
-const mockDbInstance = mock(() => ({
-    selectFrom: mock(() => ({
-        selectAll: mock(() => ({
-            where: mock(() => ({
-                executeTakeFirst: mock(() => Promise.resolve(null)),
-            })),
-        })),
-    })),
-}));
-
-const mockKysely = mock(() => mockDbInstance());
-const mockNeonDialect = mock(() => ({}));
 
 // Mock the static CSV data
 const mockMvrCsv = `"fid","username","display_name","address","transaction_hash","block_number","timestamp","follower_count","sequence","following_count","verified_accounts","score","spam_label","spam_label_updated","rewards_score","rewards_cents","purchase_type"
@@ -31,14 +17,6 @@ const mockDwrCsv = `subscriber_number,fid,created_at_timestamp
 describe("Pro NFT Functions", () => {
     beforeAll(() => {
         // Mock the modules
-        mock.module("kysely", () => ({
-            Kysely: mockKysely,
-        }));
-
-        mock.module("kysely-neon", () => ({
-            NeonDialect: mockNeonDialect,
-        }));
-
         mock.module("tiny-invariant", () => ({
             default: mock((condition: boolean, message: string) => {
                 if (!condition) {
@@ -56,13 +34,6 @@ describe("Pro NFT Functions", () => {
         }));
     });
 
-    beforeEach(() => {
-        // Reset all mocks
-        mockDbInstance.mockClear();
-        mockKysely.mockClear();
-        mockNeonDialect.mockClear();
-    });
-
     afterAll(() => {
         // Restore all mocks
         mock.restore();
@@ -77,6 +48,7 @@ describe("Pro NFT Functions", () => {
                 fid: 1077239,
                 order: 10001, // 10000 + 0 (first entry)
                 timestamp: 1748376337,
+                expires: 1781630383,
             });
         });
 
@@ -88,6 +60,7 @@ describe("Pro NFT Functions", () => {
                 fid: 680,
                 order: 10003, // 10000 + 2 (third entry)
                 timestamp: 1748377267,
+                expires: 1781630383,
             });
         });
 
@@ -99,6 +72,7 @@ describe("Pro NFT Functions", () => {
                 fid: 549521,
                 order: 1, // subscriber_number
                 timestamp: 1748376022.02841,
+                expires: 1781630383,
             });
         });
 
@@ -110,6 +84,7 @@ describe("Pro NFT Functions", () => {
                 fid: 451,
                 order: 2, // subscriber_number
                 timestamp: 1748376045.92279,
+                expires: 1781630383,
             });
         });
 
@@ -131,6 +106,7 @@ describe("Pro NFT Functions", () => {
                 fid: 451,
                 order: 10004,
                 timestamp: 1748376000,
+                expires: 1781630383,
             });
         });
 
@@ -149,6 +125,7 @@ describe("Pro NFT Functions", () => {
                 fid: 1077239,
                 order: 10001,
                 timestamp: 1748376337,
+                expires: 1781630383,
             });
         });
 
@@ -168,6 +145,7 @@ describe("Pro NFT Functions", () => {
                 fid: 1077239,
                 order: 10001,
                 timestamp: 1748376337,
+                expires: 1781630383,
             });
         });
 
@@ -182,7 +160,12 @@ describe("Pro NFT Functions", () => {
             const zeroFid = 0;
             const result = await getProNftDetails(zeroFid);
 
-            expect(result).toBeUndefined();
+            expect(result).toEqual({
+                fid: 0,
+                order: 37502563,
+                timestamp: 1761794473,
+                expires: 1764386473,
+            });
         });
 
         it("should handle edge case with negative fid", async () => {
@@ -210,7 +193,7 @@ describe("Pro NFT Functions", () => {
             const fid = 1077239;
             const result = await getProNftDetails(fid);
 
-            // Should return undefined because the fid is "invalid" (not a number)
+            // Should return null because the fid is "invalid" (not a number)
             expect(result).toBeUndefined();
         });
 

@@ -41,13 +41,13 @@ export const getProNftDetails = async (
 		.split("\n")
 		.filter((line) => line.trim() !== "") // Skip empty lines
 		.map((l, idx) => {
-			const line = l.split(`\",\"`);
+			const line = l.split(`","`);
 			// Skip lines that don't have enough fields
 			if (line.length < 7) {
 				return null;
 			}
 			const d: ProNftDetails = {
-				fid: Number(line[0].replace(`\"`, "")),
+				fid: Number(line[0].replace(`"`, "")),
 				order: 10000 + idx,
 				timestamp: Number(line[6].replace('"', "")),
 				expires: 1781630383 // smart contract was deployed later
