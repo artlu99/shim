@@ -14,9 +14,9 @@ import {
 	getReverseChronChannelFeed,
 	postReverseChronFeed,
 } from "./routes/feed";
-import { mutuals } from "./routes/mutuals";
 import { postRefresh, processFids } from "./routes/refresh";
 import { stats } from "./routes/stats";
+import { timestamp } from "./routes/timestamps";
 import { livenessFids } from "./static/artlu";
 
 dotenvConfig();
@@ -28,7 +28,6 @@ new Elysia()
 	.use(cors())
 	.use(docs)
 	.use(stats)
-	.use(mutuals)
 	.use(fu)
 	.use(getAllCastsAndRepliesByUsername)
 	.use(getCastByFidAndHash)
@@ -37,6 +36,7 @@ new Elysia()
 	.use(getReverseChronChannelFeed)
 	.use(postReverseChronFeed)
 	.use(postRefresh)
+	.use(timestamp)
 	.get("/health", () => "OK")
 	.use(
 		cron({
@@ -82,7 +82,17 @@ new Elysia()
 					<h1>
 						view <a href="/docs">API documentation</a>
 					</h1>
-					<div>Hello Elysia 🦊 via Render</div>
+					<div>Bun Elysia 🦊 deployed on Render</div>
+					<h4>
+						FOSS on{" "}
+						<a
+							href="https://github.com/artlu99/shim"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							GitHub
+						</a>
+					</h4>
 				</body>
 			</html>
 		),
