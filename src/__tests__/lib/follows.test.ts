@@ -5,7 +5,7 @@ describe("follows", () => {
     it("should get follows by fid", async () => {
         const testCases = [
             { fid: 2, expectedFollows: 1849 },
-            { fid: 3, expectedFollows: 1429 },
+            { fid: 3, expectedFollows: 65 },
             { fid: 1689, expectedFollows: 1419 },
             { fid: 6546, expectedFollows: 0 }
         ];

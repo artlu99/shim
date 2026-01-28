@@ -1,10 +1,11 @@
 import {
+	getInsecureHubRpcClient,
 	type HubEvent,
 	HubEventType,
 	MessageType,
-	getInsecureHubRpcClient,
 } from "@farcaster/hub-nodejs";
 import { sift } from "radash";
+import invariant from "tiny-invariant";
 import {
 	CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE,
 	FARCASTER_EPOCH,
@@ -22,7 +23,8 @@ import { hexToUint8Array, uin8ArrayToHex } from "./util";
 const DEV = process.env.DEV === "FALSE";
 const DO_STREAM = false;
 
-const hubRpcEndpoint = "hub.merv.fun:3383";
+invariant(process.env.HUB_GRPC_ENDPOINT, "HUB_GRPC_ENDPOINT is not set");
+const hubRpcEndpoint = process.env.HUB_GRPC_ENDPOINT;
 
 const client = !DEV
 	? getInsecureHubRpcClient(hubRpcEndpoint, {
@@ -203,6 +205,7 @@ export const getCastsByFid = async (
 				if (m.data?.castAddBody) {
 					return m as CastAddMessage;
 				}
+				return undefined;
 			}),
 		);
 		casts = sift(await Promise.all(res.map(getCastFromAddMessage)));
@@ -256,6 +259,7 @@ export const rawChannelFeed = async (
 				if (m.data?.castAddBody) {
 					return m as CastAddMessage;
 				}
+				return undefined;
 			}),
 		);
 		casts = sift(await Promise.all(res.map(getCastFromAddMessage)));

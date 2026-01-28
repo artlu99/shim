@@ -9,26 +9,26 @@
 		"test:coverage": "bun test --coverage --coverage-reporter=text"
 	},
 	"dependencies": {
-		"@elysiajs/cors": "^1.4.0",
+		"@elysiajs/cors": "^1.4.1",
 		"@elysiajs/cron": "^1.4.1",
 		"@elysiajs/html": "^1.4.0",
 		"@elysiajs/swagger": "^1.3.1",
-		"@farcaster/hub-nodejs": "^0.13.6",
-		"@upstash/redis": "^1.35.7",
+		"@farcaster/hub-nodejs": "^0.15.9",
+		"@upstash/redis": "^1.36.1",
 		"date-fns": "^4.1.0",
-		"dotenv": "^16.6.1",
-		"elysia": "^1.4.18",
-		"itty-fetcher": "^0.9.4",
-		"kysely": "^0.28.8",
-		"kysely-neon": "^1.3.0",
+		"dotenv": "^17.2.3",
+		"elysia": "^1.4.22",
+		"itty-fetcher": "0.9.4",
+		"kysely": "^0.28.10",
+		"kysely-neon": "1.3.0",
 		"progress": "^2.0.3",
 		"radash": "^12.1.1",
 		"tiny-invariant": "^1.3.3"
 	},
 	"devDependencies": {
-		"@farcaster/core": "^0.16.5",
-		"@scalar/types": "^0.1.16",
-		"@types/bun": "^1.3.3",
+		"@farcaster/core": "^0.18.9",
+		"@scalar/types": "^0.5.10",
+		"@types/bun": "^1.3.7",
 		"@types/progress": "^2.0.7"
 	}
 }
