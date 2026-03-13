@@ -1,6 +1,7 @@
 import { cors } from "@elysiajs/cors";
 import { cron } from "@elysiajs/cron";
 import { Html, html } from "@elysiajs/html";
+import { createMarkdownFromOpenApi } from "@scalar/openapi-to-markdown";
 import { config as dotenvConfig } from "dotenv";
 import "dotenv/config";
 import { Elysia } from "elysia";
@@ -23,7 +24,7 @@ dotenvConfig();
 
 const port = process.env.PORT || 3000;
 
-new Elysia()
+const app = new Elysia()
 	.onStart(() => console.log(`🦊 Elysia is running on port ${port}`))
 	.use(cors())
 	.use(docs)
@@ -99,3 +100,24 @@ new Elysia()
 		{ detail: { hide: true } },
 	)
 	.listen(port);
+
+let cachedMarkdown: string | null = null;
+app.get(
+	"/llms.txt",
+	async () => {
+		if (cachedMarkdown) return cachedMarkdown;
+		const res = await app.handle(new Request("http://localhost/docs/json"));
+		const spec = (await res.json()) as Parameters<
+			typeof createMarkdownFromOpenApi
+		>[0];
+		cachedMarkdown = await createMarkdownFromOpenApi(spec);
+		return cachedMarkdown;
+	},
+	{
+		detail: {
+			summary: "Documentation",
+			description: "Returns documentation in Markdown format",
+			tags: ["Documentation"],
+		},
+	},
+);
