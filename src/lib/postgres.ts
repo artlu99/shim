@@ -51,7 +51,9 @@ const CURSOR_SALT = 42069;
 
 const encodeCursor = (timestamp: string): string => {
 	// Convert timestamp to number, add salt, then back to string
-	const saltedTimestamp = (Number.parseInt(timestamp, 10) + CURSOR_SALT).toString();
+	const saltedTimestamp = (
+		Number.parseInt(timestamp, 10) + CURSOR_SALT
+	).toString();
 	return `${CURSOR_VERSION}:${btoa(saltedTimestamp)}`;
 };
 
@@ -188,9 +190,8 @@ export const getReverseChronFeed = async (
 	};
 };
 
-
 export const insertFollows = async (
-	followsToInsert: { fid: number; target: number }[]
+	followsToInsert: { fid: number; target: number }[],
 ): Promise<number> => {
 	const fid = followsToInsert[0].fid;
 	try {

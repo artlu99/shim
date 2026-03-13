@@ -17,16 +17,26 @@ export const timestamp = new Elysia().get(
 			berlin: dateObj.toLocaleString("de-DE", { timeZone: "Europe/Berlin" }),
 			lagos: dateObj.toLocaleString("en-NG", { timeZone: "Africa/Lagos" }),
 			london: dateObj.toLocaleString("en-GB", { timeZone: "Europe/London" }),
-			buenos_aires: dateObj.toLocaleString("es-AR", { timeZone: "America/Buenos_Aires" }),
-			new_york: dateObj.toLocaleString("en-US", { timeZone: "America/New_York" }),
+			buenos_aires: dateObj.toLocaleString("es-AR", {
+				timeZone: "America/Buenos_Aires",
+			}),
+			new_york: dateObj.toLocaleString("en-US", {
+				timeZone: "America/New_York",
+			}),
 			miami: dateObj.toLocaleString("en-US", { timeZone: "America/New_York" }),
-			san_francisco: dateObj.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }),
-			los_angeles: dateObj.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }),
+			san_francisco: dateObj.toLocaleString("en-US", {
+				timeZone: "America/Los_Angeles",
+			}),
+			los_angeles: dateObj.toLocaleString("en-US", {
+				timeZone: "America/Los_Angeles",
+			}),
 			tokyo: dateObj.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }),
 			seoul: dateObj.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
 			shanghai: dateObj.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }),
 			taipei: dateObj.toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }),
-			singapore: dateObj.toLocaleString("en-SG", { timeZone: "Asia/Singapore" }),
+			singapore: dateObj.toLocaleString("en-SG", {
+				timeZone: "Asia/Singapore",
+			}),
 			jakarta: dateObj.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
 			bangalore: dateObj.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
 			tel_aviv: dateObj.toLocaleString("en-IL", { timeZone: "Asia/Tel_Aviv" }),

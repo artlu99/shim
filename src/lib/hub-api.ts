@@ -107,7 +107,9 @@ async function cachedFetcherPaginatedGet<T>(
 	return messages;
 }
 
-export const getHubFidByUsername = async (username: string): Promise<number | undefined> => {
+export const getHubFidByUsername = async (
+	username: string,
+): Promise<number | undefined> => {
 	try {
 		// typing is a white lie because it was deserialized over http
 		const res = await cachedFetcherGet<UserNameProof>(
@@ -124,9 +126,11 @@ export const getHubFidByUsername = async (username: string): Promise<number | un
 		);
 		return undefined;
 	}
-}
+};
 
-export const getHubUserByFid = async (fid: number): Promise<User | undefined> => {
+export const getHubUserByFid = async (
+	fid: number,
+): Promise<User | undefined> => {
 	try {
 		// typing is a white lie because it was deserialized over http
 		const res0 = await cachedFetcherGet<{ proofs: UserNameProof[] }>(
@@ -184,7 +188,9 @@ export const getHubUserByFid = async (fid: number): Promise<User | undefined> =>
 	}
 };
 
-export const getUsernameByFid = async (fid: number): Promise<string | undefined> => {
+export const getUsernameByFid = async (
+	fid: number,
+): Promise<string | undefined> => {
 	const user = await getHubUserByFid(fid);
 	const username = user?.username ?? undefined;
 
@@ -210,12 +216,18 @@ export const getFollowingByFid = async (fid: number): Promise<number[]> => {
 	}
 };
 
-export const getSignersByFid = async (fid: number, signer: string): Promise<{
-	chainId: number | undefined;
-	timestamp: number | undefined;
-	humanReadableTimestamp: string | undefined;
-	txnHash: Uint8Array<ArrayBufferLike> | undefined;
-} | undefined> => {
+export const getSignersByFid = async (
+	fid: number,
+	signer: string,
+): Promise<
+	| {
+			chainId: number | undefined;
+			timestamp: number | undefined;
+			humanReadableTimestamp: string | undefined;
+			txnHash: Uint8Array<ArrayBufferLike> | undefined;
+	  }
+	| undefined
+> => {
 	try {
 		const res = await cachedFetcherGet<{ events: SignerOnChainEvent[] }>(
 			`/v1/onChainSignersByFid?fid=${fid}`,
@@ -249,19 +261,19 @@ export const getStorageByFid = async (fid: number) => {
 		const res = await cachedFetcherGet<{
 			limits: {
 				storeType:
-				| "Casts"
-				| "Links"
-				| "Reactions"
-				| "UserData"
-				| "Verifications"
-				| "UsernameProofs";
+					| "Casts"
+					| "Links"
+					| "Reactions"
+					| "UserData"
+					| "Verifications"
+					| "UsernameProofs";
 				name:
-				| "CASTS"
-				| "LINKS"
-				| "REACTIONS"
-				| "USER_DATA"
-				| "VERIFICATIONS"
-				| "USERNAME_PROOFS";
+					| "CASTS"
+					| "LINKS"
+					| "REACTIONS"
+					| "USER_DATA"
+					| "VERIFICATIONS"
+					| "USERNAME_PROOFS";
 				limit: number;
 				used: number;
 				earliestTimestamp: number;

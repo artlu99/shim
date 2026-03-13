@@ -62,7 +62,7 @@ export interface User {
 		order: number;
 		subscribed_at: string;
 		expires_at: string;
-		status: "subscribed" | "unsubscribed"
+		status: "subscribed" | "unsubscribed";
 	} | null;
 }
 
