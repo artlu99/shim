@@ -1,5 +1,5 @@
-import { Redis } from "@upstash/redis";
 import invariant from "tiny-invariant";
+import { LmdisClient as Redis } from "./lmdis";
 
 export enum Ttl {
 	SHORT = 60, // 60 seconds
