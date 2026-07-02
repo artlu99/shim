@@ -3,9 +3,6 @@
 		"backfill": "bun run src/scripts/backfill.ts",
 		"dev": "bun run --watch src/index.tsx",
 		"start": "NODE_ENV=production bun src/index.tsx",
-		"test:mocked": "bun test src/__tests__/lib",
-		"test:integration": "bun test src/__tests__/routes",
-		"test": "bun run test:mocked && bun run test:integration",
 		"test:coverage": "bun test --coverage --coverage-reporter=text"
 	},
 	"dependencies": {

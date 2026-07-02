@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, mock } from "bun:test";
-import { getProNftDetails } from "../../lib/pro-nft";
+
+type GetProNftDetails = typeof import("../../lib/pro-nft").getProNftDetails;
 
 // Mock the static CSV data
 const mockMvrCsv = `"fid","username","display_name","address","transaction_hash","block_number","timestamp","follower_count","sequence","following_count","verified_accounts","score","spam_label","spam_label_updated","rewards_score","rewards_cents","purchase_type"
@@ -15,7 +16,9 @@ const mockDwrCsv = `subscriber_number,fid,created_at_timestamp
 5,583095,1748376097.74266`;
 
 describe("Pro NFT Functions", () => {
-	beforeAll(() => {
+	let getProNftDetails: GetProNftDetails;
+
+	beforeAll(async () => {
 		// Mock the modules
 		mock.module("tiny-invariant", () => ({
 			default: mock((condition: boolean, message: string) => {
@@ -32,6 +35,8 @@ describe("Pro NFT Functions", () => {
 		mock.module("../../static/dwr", () => ({
 			csv: mockDwrCsv,
 		}));
+
+		({ getProNftDetails } = await import("../../lib/pro-nft"));
 	});
 
 	afterAll(() => {

@@ -1,18 +1,19 @@
 import {
 	afterAll,
-	beforeAll,
 	beforeEach,
 	describe,
 	expect,
 	it,
-	mock,
+	spyOn,
 } from "bun:test";
+import * as hubApi from "../../lib/hub-api";
 import {
 	getSentFromBySignerKey,
 	getUserByFid,
 	hydrateText,
 } from "../../lib/hydration";
-import type { ProNftDetails, User } from "../../types";
+import * as proNft from "../../lib/pro-nft";
+import * as warpcast from "../../lib/warpcast";
 
 // fixtures
 const mockFid = 123;
@@ -48,44 +49,26 @@ const mockUser2 = {
 	},
 };
 
-// Create mock functions that we can reference
-const mockGetHubUserByFid = mock(() => Promise.resolve(null as User | null));
-const mockGetProNftDetails = mock(() =>
-	Promise.resolve(null as ProNftDetails | null),
-);
-const mockGetUserPrimaryAddress = mock(() =>
-	Promise.resolve(null as `0x${string}` | null),
-);
+// Create spies that we can configure per test
+const hubUserSpy = spyOn(hubApi, "getHubUserByFid");
+const proNftSpy = spyOn(proNft, "getProNftDetails");
+const primaryAddressSpy = spyOn(warpcast, "getUserPrimaryAddress");
 
 describe("Hydration Functions", () => {
-	beforeAll(() => {
-		// Mock the modules with our mock functions
-		mock.module("../../lib/hub-api", () => ({
-			getHubUserByFid: mockGetHubUserByFid,
-		}));
-		mock.module("../../lib/pro-nft", () => ({
-			getProNftDetails: mockGetProNftDetails,
-		}));
-		mock.module("../../lib/warpcast", () => ({
-			getUserPrimaryAddress: mockGetUserPrimaryAddress,
-		}));
-	});
-
 	beforeEach(() => {
-		// Clear all mock state
-		mockGetHubUserByFid.mockClear();
-		mockGetProNftDetails.mockClear();
-		mockGetUserPrimaryAddress.mockClear();
+		hubUserSpy.mockReset();
+		proNftSpy.mockReset();
+		primaryAddressSpy.mockReset();
 
-		// Set default mock implementations to return null/undefined
-		mockGetHubUserByFid.mockResolvedValue(null);
-		mockGetProNftDetails.mockResolvedValue(null);
-		mockGetUserPrimaryAddress.mockResolvedValue(null);
+		hubUserSpy.mockResolvedValue(null);
+		proNftSpy.mockResolvedValue(undefined);
+		primaryAddressSpy.mockResolvedValue(null);
 	});
 
 	afterAll(() => {
-		// Restore all mocks
-		mock.restore();
+		hubUserSpy.mockRestore();
+		proNftSpy.mockRestore();
+		primaryAddressSpy.mockRestore();
 	});
 
 	describe("getUserByFid", () => {
@@ -109,15 +92,15 @@ describe("Hydration Functions", () => {
 				expires: 1234567891,
 			};
 
-			mockGetHubUserByFid.mockResolvedValue(mockHubUser);
-			mockGetUserPrimaryAddress.mockResolvedValue(mockPrimaryAddress);
-			mockGetProNftDetails.mockResolvedValue(mockProNftDetails);
+			hubUserSpy.mockResolvedValue(mockHubUser);
+			primaryAddressSpy.mockResolvedValue(mockPrimaryAddress);
+			proNftSpy.mockResolvedValue(mockProNftDetails);
 
 			const result = await getUserByFid(123);
 
-			expect(mockGetHubUserByFid).toHaveBeenCalledWith(123);
-			expect(mockGetUserPrimaryAddress).toHaveBeenCalledWith(123);
-			expect(mockGetProNftDetails).toHaveBeenCalledWith(123);
+			expect(hubUserSpy).toHaveBeenCalledWith(123);
+			expect(primaryAddressSpy).toHaveBeenCalledWith(123);
+			expect(proNftSpy).toHaveBeenCalledWith(123);
 
 			expect(result).toEqual({
 				fid: 123,
@@ -136,9 +119,9 @@ describe("Hydration Functions", () => {
 		});
 
 		it("should handle missing hub user data", async () => {
-			mockGetHubUserByFid.mockResolvedValue(null);
-			mockGetUserPrimaryAddress.mockResolvedValue(null);
-			mockGetProNftDetails.mockResolvedValue(null);
+			hubUserSpy.mockResolvedValue(null);
+			primaryAddressSpy.mockResolvedValue(null);
+			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
 
@@ -164,9 +147,9 @@ describe("Hydration Functions", () => {
 				proNft: null,
 			};
 
-			mockGetHubUserByFid.mockResolvedValue(mockHubUser);
-			mockGetUserPrimaryAddress.mockResolvedValue(null);
-			mockGetProNftDetails.mockResolvedValue(null);
+			hubUserSpy.mockResolvedValue(mockHubUser);
+			primaryAddressSpy.mockResolvedValue(null);
+			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
 
@@ -192,9 +175,9 @@ describe("Hydration Functions", () => {
 				proNft: null,
 			};
 
-			mockGetHubUserByFid.mockResolvedValue(mockHubUser);
-			mockGetUserPrimaryAddress.mockResolvedValue(null);
-			mockGetProNftDetails.mockResolvedValue(null);
+			hubUserSpy.mockResolvedValue(mockHubUser);
+			primaryAddressSpy.mockResolvedValue(null);
+			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
 
@@ -212,9 +195,9 @@ describe("Hydration Functions", () => {
 				proNft: null,
 			};
 
-			mockGetHubUserByFid.mockResolvedValue(mockHubUser);
-			mockGetUserPrimaryAddress.mockResolvedValue(null);
-			mockGetProNftDetails.mockResolvedValue(null);
+			hubUserSpy.mockResolvedValue(mockHubUser);
+			primaryAddressSpy.mockResolvedValue(null);
+			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
 
@@ -305,7 +288,7 @@ describe("Hydration Functions", () => {
 				proNft: null,
 			};
 
-			mockGetHubUserByFid.mockResolvedValue(mockUser);
+			hubUserSpy.mockResolvedValue(mockUser);
 
 			const text = "Hello @world!";
 			const mentions = [123];
@@ -313,12 +296,12 @@ describe("Hydration Functions", () => {
 
 			const result = await hydrateText(text, mentions, mentionsPositions);
 
-			expect(mockGetHubUserByFid).toHaveBeenCalledWith(123);
+			expect(hubUserSpy).toHaveBeenCalledWith(123);
 			expect(result).toBe("Hello @testuser world!");
 		});
 
 		it("should hydrate text with multiple mentions", async () => {
-			mockGetHubUserByFid
+			hubUserSpy
 				.mockResolvedValueOnce(mockUser1)
 				.mockResolvedValueOnce(mockUser2);
 
@@ -328,13 +311,13 @@ describe("Hydration Functions", () => {
 
 			const result = await hydrateText(text, mentions, mentionsPositions);
 
-			expect(mockGetHubUserByFid).toHaveBeenCalledWith(123);
-			expect(mockGetHubUserByFid).toHaveBeenCalledWith(456);
+			expect(hubUserSpy).toHaveBeenCalledWith(123);
+			expect(hubUserSpy).toHaveBeenCalledWith(456);
 			expect(result).toBe("Hello @testuser user1 and@user2 @user2!");
 		});
 
 		it("should handle mentions in different order than positions", async () => {
-			mockGetHubUserByFid
+			hubUserSpy
 				.mockResolvedValueOnce(mockUser1)
 				.mockResolvedValueOnce(mockUser2);
 
@@ -348,7 +331,7 @@ describe("Hydration Functions", () => {
 		});
 
 		it("should handle unknown users with <unknown> placeholder", async () => {
-			mockGetHubUserByFid.mockResolvedValue(null);
+			hubUserSpy.mockResolvedValue(null);
 
 			const text = "Hello @unknown!";
 			const mentions = [999];
@@ -360,7 +343,7 @@ describe("Hydration Functions", () => {
 		});
 
 		it("should handle mentions at the beginning of text", async () => {
-			mockGetHubUserByFid.mockResolvedValue(mockUser1);
+			hubUserSpy.mockResolvedValue(mockUser1);
 
 			const text = "@testuser Hello world!";
 			const mentions = [123];
@@ -372,7 +355,7 @@ describe("Hydration Functions", () => {
 		});
 
 		it("should handle mentions at the end of text", async () => {
-			mockGetHubUserByFid.mockResolvedValue(mockUser1);
+			hubUserSpy.mockResolvedValue(mockUser1);
 
 			const text = "Hello world! @testuser";
 			const mentions = [123];
@@ -384,7 +367,7 @@ describe("Hydration Functions", () => {
 		});
 
 		it("should handle consecutive mentions", async () => {
-			mockGetHubUserByFid
+			hubUserSpy
 				.mockResolvedValueOnce(mockUser1)
 				.mockResolvedValueOnce(mockUser2);
 
@@ -398,7 +381,7 @@ describe("Hydration Functions", () => {
 		});
 
 		it("should handle unicode characters correctly", async () => {
-			mockGetHubUserByFid.mockResolvedValue(mockUser1);
+			hubUserSpy.mockResolvedValue(mockUser1);
 
 			const text = "Hello @user with emoji 🚀!";
 			const mentions = [123];
@@ -410,7 +393,7 @@ describe("Hydration Functions", () => {
 		});
 
 		it("should handle mixed case usernames", async () => {
-			mockGetHubUserByFid.mockResolvedValue(mockUser1);
+			hubUserSpy.mockResolvedValue(mockUser1);
 
 			const text = "Hello @testuser!";
 			const mentions = [123];
@@ -422,7 +405,7 @@ describe("Hydration Functions", () => {
 		});
 
 		it("should handle mentions with special characters in usernames", async () => {
-			mockGetHubUserByFid.mockResolvedValue(mockUser1);
+			hubUserSpy.mockResolvedValue(mockUser1);
 
 			const text = "Hello @user!";
 			const mentions = [123];
