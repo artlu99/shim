@@ -60,9 +60,9 @@ describe("Hydration Functions", () => {
 		proNftSpy.mockReset();
 		primaryAddressSpy.mockReset();
 
-		hubUserSpy.mockResolvedValue(null);
+		hubUserSpy.mockResolvedValue(undefined);
 		proNftSpy.mockResolvedValue(undefined);
-		primaryAddressSpy.mockResolvedValue(null);
+		primaryAddressSpy.mockResolvedValue(undefined);
 	});
 
 	afterAll(() => {
@@ -93,7 +93,11 @@ describe("Hydration Functions", () => {
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
-			primaryAddressSpy.mockResolvedValue(mockPrimaryAddress);
+			primaryAddressSpy.mockResolvedValue({
+				fid: mockFid,
+				protocol: "ethereum",
+				address: mockPrimaryAddress,
+			});
 			proNftSpy.mockResolvedValue(mockProNftDetails);
 
 			const result = await getUserByFid(123);
@@ -108,7 +112,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: "Test bio",
-				primaryAddress: null,
+				primaryAddress: mockPrimaryAddress,
 				proNft: {
 					order: 1,
 					subscribed_at: new Date(1234567890 * 1000).toISOString(),
@@ -119,8 +123,8 @@ describe("Hydration Functions", () => {
 		});
 
 		it("should handle missing hub user data", async () => {
-			hubUserSpy.mockResolvedValue(null);
-			primaryAddressSpy.mockResolvedValue(null);
+			hubUserSpy.mockResolvedValue(undefined);
+			primaryAddressSpy.mockResolvedValue(undefined);
 			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
@@ -148,7 +152,7 @@ describe("Hydration Functions", () => {
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
-			primaryAddressSpy.mockResolvedValue(null);
+			primaryAddressSpy.mockResolvedValue(undefined);
 			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
@@ -176,7 +180,7 @@ describe("Hydration Functions", () => {
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
-			primaryAddressSpy.mockResolvedValue(null);
+			primaryAddressSpy.mockResolvedValue(undefined);
 			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
@@ -196,7 +200,7 @@ describe("Hydration Functions", () => {
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
-			primaryAddressSpy.mockResolvedValue(null);
+			primaryAddressSpy.mockResolvedValue(undefined);
 			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
@@ -331,7 +335,7 @@ describe("Hydration Functions", () => {
 		});
 
 		it("should handle unknown users with <unknown> placeholder", async () => {
-			hubUserSpy.mockResolvedValue(null);
+			hubUserSpy.mockResolvedValue(undefined);
 
 			const text = "Hello @unknown!";
 			const mentions = [999];
