@@ -13,10 +13,11 @@ import type {
 import redis, { Ttl } from "./redis";
 
 const hub = () => {
-	// snap, crackle, pop, pow
-	VERBOSE_LOGGING && console.log("using pop.farcaster.xyz");
+	// 20260905 pop.farcaster.xyz and pow.farcaster.xyz are down
+	// snap.farcaster.xyz and crackle.farcaster.xyz are working
+	VERBOSE_LOGGING && console.log("using crackle.farcaster.xyz");
 	return fetcher({
-		base: "https://pop.farcaster.xyz:3381",
+		base: "https://crackle.farcaster.xyz:3381",
 		headers: { accept: "application/json" },
 	});
 };
