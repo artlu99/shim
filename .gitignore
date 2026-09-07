@@ -4,4 +4,5 @@ bun.lock
 
 .env
 
+AGENTS.md
 TODO.md
