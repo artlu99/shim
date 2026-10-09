@@ -67,7 +67,9 @@ export const postRefresh = new Elysia().post(
 					error: `Fid not found for ${username}`,
 				};
 			}
-			const following = await getFollowingByFid(fid);
+			// refresh only consumes the first MAX_FOLLOWERS entries, so one page
+			// of 1000 covers it without pulling the whole following graph
+			const following = await getFollowingByFid(fid, 1);
 			for (const followingFid of following.slice(0, MAX_FOLLOWERS)) {
 				allFids.add(followingFid);
 			}

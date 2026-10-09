@@ -13,11 +13,13 @@ import {
 import { type Cast, CastSchema, type HydratedCast } from "../types";
 
 const hydrateCast = async (cast: Cast): Promise<HydratedCast> => {
-	const user = await getUserByFid(cast.fid);
 	const channelId = cast?.parentUrl
 		? getChannelIdFromUrl(cast.parentUrl)
 		: undefined;
-	const channel = channelId ? await getChannel(channelId) : undefined;
+	const [user, channel] = await Promise.all([
+		getUserByFid(cast.fid),
+		channelId ? getChannel(channelId) : undefined,
+	]);
 	const sentBy = await getSentFromBySignerKey(cast.signer);
 
 	return {
@@ -70,11 +72,13 @@ export const postReverseChronFeed = new Elysia().post(
 					if (!cast) {
 						return undefined;
 					}
-					const user = await getUserByFid(fi.fid);
 					const channelId = cast?.parentUrl
 						? getChannelIdFromUrl(cast.parentUrl)
 						: undefined;
-					const channel = channelId ? await getChannel(channelId) : undefined;
+					const [user, channel] = await Promise.all([
+						getUserByFid(fi.fid),
+						channelId ? getChannel(channelId) : undefined,
+					]);
 
 					const sentBy = await getSentFromBySignerKey(cast.signer);
 

@@ -50,7 +50,9 @@ async function cachedFetcherPaginatedGet<T>(
 	shortCircut?: { key: string; value?: string },
 ) {
 	const cacheClient = redis();
-	const cacheKey = `hub:${baseUri}`;
+	// pageSize/maxPages are part of the key so a capped fetch cannot poison
+	// the cache for full fetches of the same uri
+	const cacheKey = `hub:${baseUri}:${pageSize}:${maxPages}`;
 
 	const cacheResponse = await cacheClient.get(cacheKey);
 
@@ -198,13 +200,16 @@ export const getUsernameByFid = async (
 	return username;
 };
 
-export const getFollowingByFid = async (fid: number): Promise<number[]> => {
+export const getFollowingByFid = async (
+	fid: number,
+	maxPages = 10,
+): Promise<number[]> => {
 	try {
 		const res = await cachedFetcherPaginatedGet<LinkAddMessage>(
 			`/v1/linksByFid?fid=${fid}&reverse=false&link_type=follow`,
 			Ttl.FEED,
 			1000,
-			10,
+			maxPages,
 		);
 		return sift(res.map((m) => m.data.linkBody.targetFid));
 	} catch (error) {

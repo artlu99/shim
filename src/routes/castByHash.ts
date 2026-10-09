@@ -17,9 +17,12 @@ export const getCastByHash = new Elysia().get(
 		}
 
 		const { fid } = castDbObj;
-		const user = await getUserByFid(fid);
 
-		const cast = await getCastById(fid, `0x${castHash.replace("0x", "")}`);
+		// user and cast only need fid+hash, so fetch them concurrently
+		const [user, cast] = await Promise.all([
+			getUserByFid(fid),
+			getCastById(fid, `0x${castHash.replace("0x", "")}`),
+		]);
 		// if the cast has been deleted, it will no longer be on Snapchain
 		if (!cast) {
 			return {
