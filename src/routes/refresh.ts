@@ -7,13 +7,21 @@ import {
 } from "../constants";
 import { getFollowingByFid, getHubFidByUsername } from "../lib/hub-api";
 import { getCastsByFid } from "../lib/hub-grpc";
+import { getLatestCastTimestamps } from "../lib/postgres";
 
 export const processFids = async (allFids: number[]) => {
+	// incremental: users we already have casts for only pull new messages
+	// from the hub (server-side startTimestamp filter); unknown users do a
+	// full sync
+	const watermarks = await getLatestCastTimestamps(allFids);
+
 	// Process FIDs in parallel batches of REFRESH_PARALLEL_BATCHES (20)
 	const results = [];
 	for (const batch of cluster(allFids, REFRESH_PARALLEL_BATCHES)) {
 		const batchResults = await Promise.all(
-			batch.map(async (fid: number) => getCastsByFid(fid, REFRESH_CASTS_SIZE)),
+			batch.map(async (fid: number) =>
+				getCastsByFid(fid, REFRESH_CASTS_SIZE, watermarks.get(fid)),
+			),
 		);
 		results.push(...batchResults);
 	}
@@ -66,7 +74,7 @@ export const postRefresh = new Elysia().post(
 			allFids.add(fid);
 		}
 
-		const res = processFids(Array.from(allFids));
+		const res = await processFids(Array.from(allFids));
 
 		return res;
 	},

@@ -152,6 +152,24 @@ export const getStats = async (topN = 5) => {
 	return { total: totalStats, topFids };
 };
 
+export const getLatestCastTimestamps = async (
+	fids: number[],
+): Promise<Map<number, number>> => {
+	if (fids.length === 0) {
+		return new Map();
+	}
+	// timestamps are fixed-width unix-seconds strings, so lexicographic MAX
+	// is numeric MAX
+	const rows = await db()
+		.selectFrom("casts")
+		.select((eb) => [eb.ref("fid").as("fid"), eb.fn.max("timestamp").as("latest")])
+		.where("fid", "in", fids)
+		.where("deleted_at", "is", null)
+		.groupBy("fid")
+		.execute();
+	return new Map(rows.map((row) => [Number(row.fid), Number(row.latest)]));
+};
+
 export const getReverseChronFeed = async (
 	fids: number[],
 	limit = 10,

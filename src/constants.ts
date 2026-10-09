@@ -20,3 +20,6 @@ export const REACTIONS_DEFAULT_PAGE_SIZE = 250;
 export const MAX_FOLLOWERS = 100;
 export const REFRESH_PARALLEL_BATCHES = 20;
 export const REFRESH_CASTS_SIZE = 500;
+
+// hub rpc
+export const HUB_RPC_DEADLINE_MS = 10_000;

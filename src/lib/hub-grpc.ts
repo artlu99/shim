@@ -10,6 +10,7 @@ import {
 	CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE,
 	FARCASTER_EPOCH,
 	FEED_DEFAULT_PAGE_SIZE,
+	HUB_RPC_DEADLINE_MS,
 	VERBOSE_LOGGING,
 } from "../constants";
 import { livenessFids } from "../static/artlu";
@@ -35,6 +36,20 @@ const client = !DEV
 			"grpc.keepalive_permit_without_calls": 1,
 		})
 	: undefined;
+
+// hub rpc calls have no built-in deadline reachable through the typed
+// client; against a stalled hub node they hang forever, which used to leave
+// /refresh (and feed reads) unresolved. The race rejects the caller but
+// cannot cancel the underlying RPC at the transport level.
+const withDeadline = <T>(rpc: Promise<T>): Promise<T> =>
+	new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(
+			() => reject(new Error(`hub rpc deadline exceeded after ${HUB_RPC_DEADLINE_MS}ms`)),
+			HUB_RPC_DEADLINE_MS,
+		);
+		timer.unref?.();
+		rpc.then(resolve, reject).finally(() => clearTimeout(timer));
+	});
 
 DO_STREAM &&
 	client?.$.waitForReady(Date.now() + 5000, async (e) => {
@@ -153,7 +168,7 @@ export const getCastById = async (
 			return cacheResponse as Cast;
 		}
 
-		const cast = await client.getCast({ fid, hash: hexToUint8Array(hash) });
+		const cast = await withDeadline(client.getCast({ fid, hash: hexToUint8Array(hash) }));
 
 		if (!cast.isOk()) {
 			console.log("throw!");
@@ -182,6 +197,7 @@ export const getCastById = async (
 export const getCastsByFid = async (
 	fid: number,
 	limit = CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE,
+	sinceTimestamp?: number,
 ) => {
 	if (!client) {
 		return { casts: [], numNew: 0 };
@@ -189,11 +205,21 @@ export const getCastsByFid = async (
 	try {
 		let casts: Cast[] = [];
 
-		const castsRpcResponse = await client.getAllCastMessagesByFid({
-			fid,
-			reverse: true,
-			pageSize: limit,
-		});
+		// incremental: the hub filters server-side via startTimestamp (hub-time
+		// seconds since the Farcaster epoch), so steady-state refreshes only
+		// pull and hydrate genuinely new casts. The filter is inclusive of the
+		// watermark second — overlap is fine because upsert dedupes by hash.
+		const startTimestamp =
+			sinceTimestamp !== undefined ? sinceTimestamp - FARCASTER_EPOCH : undefined;
+
+		const castsRpcResponse = await withDeadline(
+			client.getAllCastMessagesByFid({
+				fid,
+				reverse: true,
+				pageSize: limit,
+				startTimestamp,
+			}),
+		);
 
 		if (!castsRpcResponse.isOk()) {
 			throw new Error(castsRpcResponse._unsafeUnwrapErr().toString());
@@ -208,6 +234,7 @@ export const getCastsByFid = async (
 				return undefined;
 			}),
 		);
+
 		casts = sift(await Promise.all(res.map(getCastFromAddMessage)));
 		console.log(`got ${casts.length} casts from rpc for fid ${fid}`);
 
@@ -243,11 +270,13 @@ export const rawChannelFeed = async (
 	try {
 		let casts: Cast[] = [];
 
-		const castsRpcResponse = await client.getCastsByParent({
-			parentUrl,
-			reverse: true,
-			pageSize: limit,
-		});
+		const castsRpcResponse = await withDeadline(
+			client.getCastsByParent({
+				parentUrl,
+				reverse: true,
+				pageSize: limit,
+			}),
+		);
 
 		if (!castsRpcResponse.isOk()) {
 			throw new Error(castsRpcResponse._unsafeUnwrapErr().toString());
