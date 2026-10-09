@@ -10,8 +10,8 @@ import { pluralize } from "./util";
 CREATE TABLE IF NOT EXISTS casts (
 	hash VARCHAR(44) NOT NULL PRIMARY KEY, -- 0x prefix + 42 hex chars
 	fid INTEGER NOT NULL,
-	timestamp VARCHAR(20) NOT NULL, -- Unix timestamp in milliseconds
-	deleted_at VARCHAR(20) -- Unix timestamp in milliseconds, nullable
+	timestamp VARCHAR(20) NOT NULL, -- Unix timestamp in seconds
+	deleted_at VARCHAR(20) -- Unix timestamp in seconds, nullable
 );
 
 CREATE TABLE IF NOT EXISTS follows (

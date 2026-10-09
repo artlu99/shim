@@ -256,7 +256,7 @@ export const getCastsByFid = async (
 			fid,
 			error instanceof Error ? error.message : JSON.stringify(error),
 		);
-		return { casts: [], modified: 0 };
+		return { casts: [], numNew: 0 };
 	}
 };
 
@@ -315,6 +315,6 @@ export const rawChannelFeed = async (
 			parentUrl,
 			error instanceof Error ? error.message : JSON.stringify(error),
 		);
-		return { casts: [], modified: 0 };
+		return { casts: [], numNew: 0 };
 	}
 };

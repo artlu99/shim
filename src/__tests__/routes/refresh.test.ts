@@ -1,14 +1,28 @@
-import { afterAll, describe, expect, it, spyOn } from "bun:test";
-import * as hubGrpc from "../../lib/hub-grpc";
-import * as postgres from "../../lib/postgres";
-import { processFids } from "../../routes/refresh";
+import { afterAll, beforeAll, describe, expect, it, spyOn, type Mock } from "bun:test";
 
-// spyOn (not mock.module — that patches the global registry and leaks into
-// other test files' tests, since bun evaluates all files before running any)
-const getCastsByFidSpy = spyOn(hubGrpc, "getCastsByFid");
-const getLatestCastTimestampsSpy = spyOn(postgres, "getLatestCastTimestamps");
+// Stubs must be in place before the dynamic imports in beforeAll run:
+// hub-grpc throws at import time without HUB_GRPC_ENDPOINT, and env DEV=FALSE
+// selects its no-client path (the flag logic is inverted — "FALSE" disables).
+process.env.HUB_GRPC_ENDPOINT ??= "grpc://localhost:2283";
+process.env.DEV = "FALSE";
+
+let processFids: typeof import("../../routes/refresh").processFids;
+let getCastsByFidSpy: Mock<(...args: any[]) => any>;
+let getLatestCastTimestampsSpy: Mock<(...args: any[]) => any>;
 
 describe("processFids", () => {
+	beforeAll(async () => {
+		({ processFids } = await import("../../routes/refresh"));
+
+		// spyOn (not mock.module — that patches the global registry and leaks
+		// into other test files' tests, since bun evaluates all files before
+		// running any)
+		const hubGrpc = await import("../../lib/hub-grpc");
+		const postgres = await import("../../lib/postgres");
+		getCastsByFidSpy = spyOn(hubGrpc, "getCastsByFid");
+		getLatestCastTimestampsSpy = spyOn(postgres, "getLatestCastTimestamps");
+	});
+
 	afterAll(() => {
 		getCastsByFidSpy.mockRestore();
 		getLatestCastTimestampsSpy.mockRestore();
