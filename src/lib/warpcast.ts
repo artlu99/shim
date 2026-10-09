@@ -71,7 +71,17 @@ const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 	return res as T;
 };
 
-export const getUserPrimaryAddress = async (fid: number) => {
+export interface PrimaryAddress {
+	fid: number;
+	protocol: "ethereum";
+	address: Hex;
+}
+
+// null = successful lookup with no address (404 is cached);
+// undefined = the lookup itself failed
+export const getUserPrimaryAddress = async (
+	fid: number,
+): Promise<PrimaryAddress | null | undefined> => {
 	try {
 		const res = await cachedFetcherGet<{
 			result: {

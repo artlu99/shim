@@ -1,36 +1,105 @@
 import type { User } from "../types";
 import { getHubUserByFid } from "./hub-api";
 import { getProNftDetails } from "./pro-nft";
+import redis, { Ttl } from "./redis";
 import { getUserPrimaryAddress } from "./warpcast";
 
-export const getUserByFid = async (fid: number) => {
-	const hubUser = await getHubUserByFid(fid);
+// status is time-derived (expires vs now), so it is recomputed on every
+// read — including cache hits — instead of being frozen with the cache
+const proStatus = (expiresAt: string): "subscribed" | "unsubscribed" =>
+	Date.parse(expiresAt) > Date.now() ? "subscribed" : "unsubscribed";
 
-	const primaryAddress = await getUserPrimaryAddress(fid);
+const withFreshProStatus = (user: User): User => ({
+	...user,
+	proNft: user.proNft
+		? { ...user.proNft, status: proStatus(user.proNft.expires_at) }
+		: null,
+});
 
-	const proNftDetails = await getProNftDetails(fid);
+// lmdis returns the raw string when JSON.parse fails, so verify the
+// minimal shape before trusting a cache hit
+const isCachedUser = (value: unknown): value is User =>
+	typeof value === "object" &&
+	value !== null &&
+	typeof (value as User).fid === "number";
 
-	const user: User = {
-		fid,
-		username: hubUser?.username ?? null,
-		displayName: hubUser?.displayName ?? null,
-		pfpUrl: hubUser?.pfpUrl ?? null,
-		bio: hubUser?.bio ?? null,
-		primaryAddress: primaryAddress?.address ?? null,
-		proNft: proNftDetails
-			? {
-					order: proNftDetails.order,
-					subscribed_at: new Date(proNftDetails.timestamp * 1000).toISOString(),
-					expires_at: new Date(proNftDetails.expires * 1000).toISOString(),
-					status:
-						proNftDetails.expires > Date.now() / 1000.0
-							? "subscribed"
-							: "unsubscribed",
-				}
-			: null,
-	};
+// coalesce concurrent misses for the same fid into a single fetch
+const inFlight = new Map<number, Promise<User>>();
 
-	return user;
+export const getUserByFid = async (fid: number): Promise<User> => {
+	const pending = inFlight.get(fid);
+	if (pending) {
+		return withFreshProStatus(await pending);
+	}
+
+	const fetchUser = (async (): Promise<User> => {
+		try {
+			const cachedUser = await redis().get<unknown>(`user:${fid}`);
+			if (isCachedUser(cachedUser)) {
+				return cachedUser;
+			}
+		} catch (error) {
+			console.error(
+				"Error reading user cache for fid:",
+				fid,
+				error instanceof Error ? error.message : JSON.stringify(error),
+			);
+		}
+
+		const [hubUser, primaryAddress, proNftDetails] = await Promise.all([
+			getHubUserByFid(fid),
+			getUserPrimaryAddress(fid),
+			getProNftDetails(fid),
+		]);
+
+		const user: User = {
+			fid,
+			username: hubUser?.username ?? null,
+			displayName: hubUser?.displayName ?? null,
+			pfpUrl: hubUser?.pfpUrl ?? null,
+			bio: hubUser?.bio ?? null,
+			primaryAddress: primaryAddress?.address ?? null,
+			proNft: proNftDetails
+				? {
+						order: proNftDetails.order,
+						subscribed_at: new Date(
+							proNftDetails.timestamp * 1000,
+						).toISOString(),
+						expires_at: new Date(proNftDetails.expires * 1000).toISOString(),
+						status: proStatus(
+							new Date(proNftDetails.expires * 1000).toISOString(),
+						),
+					}
+				: null,
+		};
+
+		// undefined hub user and undefined primary address are fetch failures
+		// (a real "no address" result is null). Leave those uncached so the
+		// next call retries instead of pinning a blank profile for the TTL.
+		if (hubUser && primaryAddress !== undefined) {
+			try {
+				await redis().set(`user:${fid}`, JSON.stringify(user), {
+					ex: Ttl.MEDIUM,
+				});
+			} catch (error) {
+				console.error(
+					"Error writing user cache for fid:",
+					fid,
+					error instanceof Error ? error.message : JSON.stringify(error),
+				);
+			}
+		}
+
+		return user;
+	})();
+
+	inFlight.set(fid, fetchUser);
+
+	try {
+		return withFreshProStatus(await fetchUser);
+	} finally {
+		inFlight.delete(fid);
+	}
 };
 
 export const getSentFromBySignerKey = async (signerKey: `0x${string}`) => {

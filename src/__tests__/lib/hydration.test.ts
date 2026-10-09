@@ -1,19 +1,34 @@
 import {
 	afterAll,
+	beforeAll,
 	beforeEach,
 	describe,
 	expect,
 	it,
+	mock,
 	spyOn,
 } from "bun:test";
 import * as hubApi from "../../lib/hub-api";
-import {
-	getSentFromBySignerKey,
-	getUserByFid,
-	hydrateText,
-} from "../../lib/hydration";
 import * as proNft from "../../lib/pro-nft";
+// Snapshot the real exports before mock.module. The namespace is a live
+// binding, so passing it back in afterAll would reinstall the mock.
+import * as realRedis from "../../lib/redis";
 import * as warpcast from "../../lib/warpcast";
+
+const originalRedis = {
+	default: realRedis.default,
+	Ttl: realRedis.Ttl,
+};
+
+let getUserByFid: typeof import("../../lib/hydration").getUserByFid;
+let getSentFromBySignerKey: typeof import(
+	"../../lib/hydration"
+).getSentFromBySignerKey;
+let hydrateText: typeof import("../../lib/hydration").hydrateText;
+
+// In-memory redis so getUserByFid's cache never touches the real Upstash
+// instance (mocked users must not leak into prod cache or between tests).
+const userCacheStore = new Map<string, string>();
 
 // fixtures
 const mockFid = 123;
@@ -55,7 +70,36 @@ const proNftSpy = spyOn(proNft, "getProNftDetails");
 const primaryAddressSpy = spyOn(warpcast, "getUserPrimaryAddress");
 
 describe("Hydration Functions", () => {
+	beforeAll(async () => {
+		mock.module("../../lib/redis", () => {
+			const client = {
+				get: async (key: string) => {
+					const raw = userCacheStore.get(key);
+					return raw === undefined ? null : JSON.parse(raw);
+				},
+				set: async (key: string, value: string) => {
+					userCacheStore.set(key, value);
+					return "OK";
+				},
+			};
+			return {
+				default: () => client,
+				// reuse the real enum so values can't drift from it
+				Ttl: originalRedis.Ttl,
+			};
+		});
+
+		// import after mocking so hydration binds to the mocked redis
+		({
+			getUserByFid,
+			getSentFromBySignerKey,
+			hydrateText,
+		} = await import("../../lib/hydration"));
+	});
+
 	beforeEach(() => {
+		userCacheStore.clear();
+
 		hubUserSpy.mockReset();
 		proNftSpy.mockReset();
 		primaryAddressSpy.mockReset();
@@ -66,6 +110,7 @@ describe("Hydration Functions", () => {
 	});
 
 	afterAll(() => {
+		mock.module("../../lib/redis", () => originalRedis);
 		hubUserSpy.mockRestore();
 		proNftSpy.mockRestore();
 		primaryAddressSpy.mockRestore();
@@ -206,6 +251,128 @@ describe("Hydration Functions", () => {
 			const result = await getUserByFid(123);
 
 			expect(result.proNft).toBeNull();
+		});
+
+		it("should serve repeat calls from cache without refetching", async () => {
+			const mockHubUser = {
+				fid: mockFid,
+				username: "testuser",
+				displayName: "Test User",
+				pfpUrl: null,
+				bio: null,
+				primaryAddress: null,
+				proNft: null,
+			};
+
+			hubUserSpy.mockResolvedValue(mockHubUser);
+			// null is a successful "no address" result; undefined is a fetch failure
+			primaryAddressSpy.mockResolvedValue(null);
+			proNftSpy.mockResolvedValue(undefined);
+
+			const first = await getUserByFid(123);
+
+			// the result was persisted, so the second call is served by the cache
+			expect(userCacheStore.has("user:123")).toBe(true);
+
+			const second = await getUserByFid(123);
+
+			// each underlying fetcher ran exactly once despite two calls
+			expect(hubUserSpy).toHaveBeenCalledTimes(1);
+			expect(primaryAddressSpy).toHaveBeenCalledTimes(1);
+			expect(proNftSpy).toHaveBeenCalledTimes(1);
+			expect(second).toEqual(first);
+		});
+
+		it("should coalesce concurrent calls into a single fetch", async () => {
+			const mockHubUser = {
+				fid: mockFid,
+				username: "testuser",
+				displayName: "Test User",
+				pfpUrl: null,
+				bio: null,
+				primaryAddress: null,
+				proNft: null,
+			};
+
+			hubUserSpy.mockResolvedValue(mockHubUser);
+			// null is a successful "no address" result; undefined is a fetch failure
+			primaryAddressSpy.mockResolvedValue(null);
+			proNftSpy.mockResolvedValue(undefined);
+
+			const [first, second] = await Promise.all([
+				getUserByFid(123),
+				getUserByFid(123),
+			]);
+
+			expect(hubUserSpy).toHaveBeenCalledTimes(1);
+			expect(primaryAddressSpy).toHaveBeenCalledTimes(1);
+			expect(proNftSpy).toHaveBeenCalledTimes(1);
+			expect(second).toEqual(first);
+		});
+
+		it("should not cache a missing hub user", async () => {
+			hubUserSpy.mockResolvedValue(undefined);
+			primaryAddressSpy.mockResolvedValue(null);
+			proNftSpy.mockResolvedValue(undefined);
+
+			await getUserByFid(123);
+			await getUserByFid(123);
+
+			expect(hubUserSpy).toHaveBeenCalledTimes(2);
+			expect(primaryAddressSpy).toHaveBeenCalledTimes(2);
+			expect(proNftSpy).toHaveBeenCalledTimes(2);
+			expect(userCacheStore.has("user:123")).toBe(false);
+		});
+
+		it("should not cache a failed primary address lookup", async () => {
+			hubUserSpy.mockResolvedValue({
+				fid: mockFid,
+				username: "testuser",
+				displayName: "Test User",
+				pfpUrl: null,
+				bio: null,
+				primaryAddress: null,
+				proNft: null,
+			});
+			primaryAddressSpy.mockResolvedValue(undefined);
+			proNftSpy.mockResolvedValue(undefined);
+
+			await getUserByFid(123);
+			await getUserByFid(123);
+
+			expect(hubUserSpy).toHaveBeenCalledTimes(2);
+			expect(primaryAddressSpy).toHaveBeenCalledTimes(2);
+			expect(proNftSpy).toHaveBeenCalledTimes(2);
+			expect(userCacheStore.has("user:123")).toBe(false);
+		});
+
+		it("should recompute pro status on cache hits so expiry is never stale", async () => {
+			// simulate a user cached while their pro was still active
+			userCacheStore.set(
+				`user:${mockFid}`,
+				JSON.stringify({
+					fid: mockFid,
+					username: "testuser",
+					displayName: "Test User",
+					pfpUrl: null,
+					bio: null,
+					primaryAddress: null,
+					proNft: {
+						order: 1,
+						subscribed_at: new Date(Date.now() - 86_400_000).toISOString(),
+						expires_at: new Date(Date.now() - 60_000).toISOString(), // expired 1 min ago
+						status: "subscribed", // stale value from cache-time
+					},
+				}),
+			);
+
+			const result = await getUserByFid(mockFid);
+
+			// served from cache — no underlying fetches
+			expect(hubUserSpy).not.toHaveBeenCalled();
+			expect(primaryAddressSpy).not.toHaveBeenCalled();
+			expect(proNftSpy).not.toHaveBeenCalled();
+			expect(result.proNft?.status).toBe("unsubscribed");
 		});
 	});
 
