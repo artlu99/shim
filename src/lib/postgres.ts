@@ -14,6 +14,18 @@ CREATE TABLE IF NOT EXISTS casts (
 	deleted_at VARCHAR(20) -- Unix timestamp in seconds, nullable
 );
 
+-- Applied manually (no migration tooling): see sql/2026-10-10-casts-indexes.sql
+-- Both partial on deleted_at IS NULL because every hot query filters on it.
+-- timestamp is fixed-width unix-seconds, so DESC varchar order == numeric order.
+-- Note: the hash PK already serves LIKE 'prefix%' lookups (C collation).
+CREATE INDEX CONCURRENTLY IF NOT EXISTS casts_timestamp_desc_idx
+	ON casts (timestamp DESC)
+	WHERE deleted_at IS NULL;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS casts_fid_timestamp_idx
+	ON casts (fid, timestamp DESC)
+	WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS follows (
 	fid INTEGER NOT NULL,
 	target INTEGER NOT NULL,
