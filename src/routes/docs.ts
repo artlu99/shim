@@ -28,6 +28,10 @@ export const docs = new Elysia().use(
 				{ name: "Feed", description: "Feed endpoints" },
 				{ name: "Cast", description: "Cast endpoints" },
 				{ name: "F 👉👈 U", description: "Fid to Username endpoints" },
+				{
+					name: "Social Contract",
+					description: "Social contract signature endpoints",
+				},
 			],
 		},
 	}),

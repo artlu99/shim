@@ -16,6 +16,7 @@ import {
 	postReverseChronFeed,
 } from "./routes/feed";
 import { postRefresh, processFids } from "./routes/refresh";
+import { socialContract } from "./routes/social-contract";
 import { stats } from "./routes/stats";
 import { timestamp } from "./routes/timestamps";
 import { livenessFids } from "./static/artlu";
@@ -30,6 +31,7 @@ const app = new Elysia()
 	.use(docs)
 	.use(stats)
 	.use(fu)
+	.use(socialContract)
 	.use(getAllCastsAndRepliesByUsername)
 	.use(getCastByFidAndHash)
 	.use(getCastByHash)
