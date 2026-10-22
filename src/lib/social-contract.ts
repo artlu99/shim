@@ -22,7 +22,7 @@ const encodeAddressArg = (address: Hex) =>
 
 const getSocialContractBalance = async (address: Hex): Promise<bigint> => {
 	const res = (await retry({ backoff: (i) => 10 ** i }, async () => {
-		return await baseRpc.post("/", {
+		return await baseRpc.post("", {
 			jsonrpc: "2.0",
 			id: 1,
 			method: "eth_call",
@@ -51,8 +51,8 @@ const getSocialContractBalance = async (address: Hex): Promise<bigint> => {
 // coalesce concurrent misses for the same fid into a single lookup
 const inFlight = new Map<number, Promise<boolean>>();
 
-// true is cached LONG (the token is soulbound: a signature can't be undone);
-// false is cached MEDIUM (accounts keep signing over time)
+// positives are rare (~8 in 10k fids) and the token can be burned, so `true`
+// is cached MEDIUM (new signers are the only way it goes stale)
 export const hasFidSignedSocialContract = async (
 	fid: number,
 ): Promise<boolean> => {
@@ -102,7 +102,7 @@ export const hasFidSignedSocialContract = async (
 		const signed = (await getSocialContractBalance(primaryAddress.address)) > 0n;
 		try {
 			await cacheClient.set(`social-contract:${fid}`, JSON.stringify(signed), {
-				ex: signed ? Ttl.LONG : Ttl.MEDIUM,
+				ex: Ttl.MEDIUM,
 			});
 		} catch (error) {
 			console.error(
