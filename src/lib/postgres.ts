@@ -1,5 +1,5 @@
-import { Kysely } from "kysely";
-import { NeonDialect } from "kysely-neon";
+import { Kysely, PostgresDialect } from "kysely";
+import { Pool } from "pg";
 import { cluster } from "radash";
 import invariant from "tiny-invariant";
 import { UPSERT_CHUNK_SIZE, VERBOSE_LOGGING } from "../constants";
@@ -52,7 +52,12 @@ const db = () => {
 	if (!dbInstance) {
 		invariant(process.env.DATABASE_URL, "DATABASE_URL is not set");
 		dbInstance = new Kysely<Database>({
-			dialect: new NeonDialect({ connectionString: process.env.DATABASE_URL }),
+			dialect: new PostgresDialect({
+				pool: new Pool({
+					connectionString: process.env.DATABASE_URL,
+					max: 10,
+				}),
+			}),
 		});
 	}
 	return dbInstance;

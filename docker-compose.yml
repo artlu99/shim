@@ -1,0 +1,86 @@
+name: shim
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    # debug binding only — cloudflared reaches the app over the compose network
+    ports:
+      - "127.0.0.1:7300:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      lmdis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shim
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?set PG_PASSWORD in .env}
+      POSTGRES_DB: shim
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # schema + partial indexes (plain CREATE INDEX — CONCURRENTLY is illegal
+      # inside the init-script transaction; only needed for live alteration)
+      - ./deploy/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shim -d shim"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    # no ports: reachable only on the compose network
+
+  lmdis:
+    # requires a sibling checkout: git clone https://github.com/artlu99/lmdis ../lmdis
+    build:
+      context: ../lmdis
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      LMDIS_REST_TOKEN: ${LMDIS_REST_TOKEN:?set LMDIS_REST_TOKEN in .env}
+      LMDB_PATH: /app/data/lmdb
+      # TTL-heavy cache workload: proactive sweep caps disk at a high-water mark
+      LMDIS_SWEEP_INTERVAL_MS: "60000"
+    volumes:
+      - lmdisdata:/app/data
+    mem_limit: 512m
+    healthcheck:
+      # /ready (not /health): verifies LMDB is reachable, 503 until it is
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:3000/ready').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    # no ports: reachable only on the compose network
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  lmdisdata:
