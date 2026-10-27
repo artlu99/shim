@@ -231,7 +231,9 @@ export const getUsernameByFid = async (
 	fid: number,
 ): Promise<string | undefined> => {
 	const user = await getHubUserByFid(fid);
-	const username = user?.username ?? undefined;
+	// Identity law (2026-10-27): the fname is the primary handle — /u
+	// answers it first, falling back to the newest-proof username.
+	const username = user?.fname ?? user?.username ?? undefined;
 
 	return username;
 };
