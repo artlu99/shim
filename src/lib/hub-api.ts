@@ -132,35 +132,60 @@ export const getHubFidByUsername = async (
 };
 
 /**
- * Split the fid's username proofs into the PRIMARY name and its
- * ATTESTATIONS (identity law, 2026-10-27 forkcaster profile rethink): the
- * fname is the account's primary handle — the first name, one per fid —
- * while any number of ENS names (L1 or L2/basenames) are verified
- * attestations, displayed alongside the primary and never load-bearing.
- * The input arrives deserialized over http (typing is a white lie); the
- * node answers with duplicate rows (measured: dwr/fid 3 carries the same
- * fname proof twice), so names are deduped. Row order is the node's own
- * (measured: NOT timestamp-sorted, with or without reverse=true) and is
- * preserved within each bucket — fname is the first fname proof seen.
+ * Split the fid's username proofs into the USERNAME, the PRIMARY name and
+ * its ATTESTATIONS (identity law, 2026-10-27 forkcaster profile rethink):
+ * username is the NEWEST proof of any type — the historical /user/{fid}
+ * contract (proofs[0] under reverse=true). fname is the account's primary
+ * handle — the NEWEST fname proof, one per fid (an older fname may have
+ * transferred away) — while any number of ENS names (L1 or L2/basenames)
+ * are verified attestations, displayed alongside the primary and never
+ * load-bearing. The input arrives deserialized over http (typing is a
+ * white lie); the node answers with duplicate rows (measured: dwr/fid 3
+ * carries the same fname proof twice), so names are deduped. Its row
+ * order is NOT timestamp-sorted (measured, with or without reverse=true),
+ * so rows are sorted NEWEST-FIRST here — stable: timestamp ties keep node
+ * order — and every field is deterministic regardless of the node.
  */
 export const splitUsernameProofs = (
 	proofs: UserNameProof[] | undefined,
-): { fname: string | null; attestations: string[] } => {
+): {
+	username: string | null;
+	fname: string | null;
+	attestations: string[];
+} => {
+	// timestamp is typed number but arrives over http — treat non-numbers
+	// as 0; the index tiebreak keeps ties in node answer order.
+	const rows = (proofs ?? [])
+		.map(
+			(proof) =>
+				proof as unknown as {
+					name?: unknown;
+					type?: unknown;
+					timestamp?: unknown;
+				},
+		)
+		.map((row, i) => ({
+			row,
+			i,
+			ts: typeof row.timestamp === "number" ? row.timestamp : 0,
+		}))
+		.sort((a, b) => b.ts - a.ts || a.i - b.i);
 	const seen = new Set<string>();
 	const fnames: string[] = [];
 	const attestations: string[] = [];
-	for (const proof of proofs ?? []) {
-		const row = proof as unknown as { name?: unknown; type?: unknown };
+	let username: string | null = null;
+	for (const { row } of rows) {
 		if (typeof row.name !== "string" || row.name === "" || seen.has(row.name))
 			continue;
 		seen.add(row.name);
+		if (username === null) username = row.name;
 		// protobuf JSON serializes the enum as its name string; accept the
 		// numeric form too (1 = USERNAME_TYPE_FNAME). A non-fname proof is
 		// an attestation by definition — verified, attached, decorative.
 		const isFname = row.type === "USERNAME_TYPE_FNAME" || row.type === 1;
 		(isFname ? fnames : attestations).push(row.name);
 	}
-	return { fname: fnames[0] ?? null, attestations };
+	return { username, fname: fnames[0] ?? null, attestations };
 };
 
 export const getHubUserByFid = async (
@@ -172,15 +197,13 @@ export const getHubUserByFid = async (
 			`/v1/userNameProofsByFid?fid=${fid}&reverse=true`,
 			Ttl.LONG,
 		);
-		const username = res0.proofs?.[0]?.name
-			? (res0.proofs[0].name as unknown as string)
-			: undefined;
+		const { username, fname, attestations } = splitUsernameProofs(
+			res0.proofs,
+		);
 
 		if (!username) {
 			return undefined;
 		}
-
-		const { fname, attestations } = splitUsernameProofs(res0.proofs);
 
 		const res = await cachedFetcherGet<
 			PaginatedMessagesResponse<UserDataAddMessage>
