@@ -35,6 +35,8 @@ const mockFid = 123;
 const mockUser1 = {
 	fid: mockFid,
 	username: "testuser",
+	fname: "testuser",
+	attestations: [],
 	displayName: "Test User",
 	pfpUrl: null,
 	bio: null,
@@ -51,6 +53,8 @@ const mockUser1 = {
 const mockUser2 = {
 	fid: mockFid + 1,
 	username: "user2",
+	fname: "user2",
+	attestations: [],
 	displayName: "User Two",
 	pfpUrl: null,
 	bio: null,
@@ -121,6 +125,8 @@ describe("Hydration Functions", () => {
 			const mockHubUser = {
 				fid: mockFid,
 				username: "testuser",
+				fname: "testuser",
+				attestations: [],
 				displayName: "Test User",
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: "Test bio",
@@ -154,6 +160,8 @@ describe("Hydration Functions", () => {
 			expect(result).toEqual({
 				fid: 123,
 				username: "testuser",
+				fname: "testuser",
+				attestations: [],
 				displayName: "Test User",
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: "Test bio",
@@ -177,6 +185,8 @@ describe("Hydration Functions", () => {
 			expect(result).toEqual({
 				fid: 123,
 				username: null,
+				fname: null,
+				attestations: [],
 				displayName: null,
 				pfpUrl: null,
 				bio: null,
@@ -189,6 +199,8 @@ describe("Hydration Functions", () => {
 			const mockHubUser = {
 				fid: mockFid,
 				username: "testuser",
+				fname: "testuser",
+				attestations: [],
 				displayName: null,
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: null,
@@ -205,6 +217,8 @@ describe("Hydration Functions", () => {
 			expect(result).toEqual({
 				fid: 123,
 				username: "testuser",
+				fname: "testuser",
+				attestations: [],
 				displayName: null,
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: null,
@@ -217,6 +231,8 @@ describe("Hydration Functions", () => {
 			const mockHubUser = {
 				fid: mockFid,
 				username: "testuser",
+				fname: "testuser",
+				attestations: [],
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: "Test bio",
@@ -237,6 +253,8 @@ describe("Hydration Functions", () => {
 			const mockHubUser = {
 				fid: mockFid,
 				username: "testuser",
+				fname: "testuser",
+				attestations: [],
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: "Test bio",
@@ -257,6 +275,8 @@ describe("Hydration Functions", () => {
 			const mockHubUser = {
 				fid: mockFid,
 				username: "testuser",
+				fname: "testuser",
+				attestations: [],
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
@@ -287,6 +307,8 @@ describe("Hydration Functions", () => {
 			const mockHubUser = {
 				fid: mockFid,
 				username: "testuser",
+				fname: "testuser",
+				attestations: [],
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
@@ -328,6 +350,8 @@ describe("Hydration Functions", () => {
 			hubUserSpy.mockResolvedValue({
 				fid: mockFid,
 				username: "testuser",
+				fname: "testuser",
+				attestations: [],
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
@@ -353,6 +377,8 @@ describe("Hydration Functions", () => {
 				JSON.stringify({
 					fid: mockFid,
 					username: "testuser",
+					fname: "testuser",
+					attestations: [],
 					displayName: "Test User",
 					pfpUrl: null,
 					bio: null,
@@ -452,6 +478,8 @@ describe("Hydration Functions", () => {
 			const mockUser = {
 				fid: mockFid,
 				username: "testuser",
+				fname: "testuser",
+				attestations: [],
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,

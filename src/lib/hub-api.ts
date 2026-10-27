@@ -131,6 +131,38 @@ export const getHubFidByUsername = async (
 	}
 };
 
+/**
+ * Split the fid's username proofs into the PRIMARY name and its
+ * ATTESTATIONS (identity law, 2026-10-27 forkcaster profile rethink): the
+ * fname is the account's primary handle — the first name, one per fid —
+ * while any number of ENS names (L1 or L2/basenames) are verified
+ * attestations, displayed alongside the primary and never load-bearing.
+ * The input arrives deserialized over http (typing is a white lie); the
+ * node answers with duplicate rows (measured: dwr/fid 3 carries the same
+ * fname proof twice), so names are deduped. Row order is the node's own
+ * (measured: NOT timestamp-sorted, with or without reverse=true) and is
+ * preserved within each bucket — fname is the first fname proof seen.
+ */
+export const splitUsernameProofs = (
+	proofs: UserNameProof[] | undefined,
+): { fname: string | null; attestations: string[] } => {
+	const seen = new Set<string>();
+	const fnames: string[] = [];
+	const attestations: string[] = [];
+	for (const proof of proofs ?? []) {
+		const row = proof as unknown as { name?: unknown; type?: unknown };
+		if (typeof row.name !== "string" || row.name === "" || seen.has(row.name))
+			continue;
+		seen.add(row.name);
+		// protobuf JSON serializes the enum as its name string; accept the
+		// numeric form too (1 = USERNAME_TYPE_FNAME). A non-fname proof is
+		// an attestation by definition — verified, attached, decorative.
+		const isFname = row.type === "USERNAME_TYPE_FNAME" || row.type === 1;
+		(isFname ? fnames : attestations).push(row.name);
+	}
+	return { fname: fnames[0] ?? null, attestations };
+};
+
 export const getHubUserByFid = async (
 	fid: number,
 ): Promise<User | undefined> => {
@@ -147,6 +179,8 @@ export const getHubUserByFid = async (
 		if (!username) {
 			return undefined;
 		}
+
+		const { fname, attestations } = splitUsernameProofs(res0.proofs);
 
 		const res = await cachedFetcherGet<
 			PaginatedMessagesResponse<UserDataAddMessage>
@@ -173,6 +207,8 @@ export const getHubUserByFid = async (
 		const userBeforeOffHubHydration: User = {
 			fid,
 			username,
+			fname,
+			attestations,
 			displayName,
 			pfpUrl,
 			bio,

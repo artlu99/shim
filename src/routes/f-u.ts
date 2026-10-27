@@ -93,6 +93,8 @@ export const fu = new Elysia()
 									user: Object({
 										fid: t.Number(),
 										username: t.String(),
+										fname: t.Union([t.String(), t.Null()]),
+										attestations: t.Array(t.String()),
 										displayName: t.String(),
 										pfpUrl: t.String(),
 										primaryAddress: t.String(),
