@@ -54,6 +54,10 @@ export interface Cast {
 export interface User {
 	fid: number;
 	username: string | null;
+	/** The account's fname — the PRIMARY handle: the newest fname proof (identity law, 2026-10-27). */
+	fname: string | null;
+	/** Verified ENS names (L1 + L2/basenames), newest first — attestations. */
+	attestations: string[];
 	displayName: string | null;
 	pfpUrl: string | null;
 	bio: string | null;

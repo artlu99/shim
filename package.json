@@ -4,7 +4,8 @@
 		"dev": "bun run --watch src/index.tsx",
 		"start": "NODE_ENV=production bun src/index.tsx",
 		"test:coverage": "bun test --coverage --coverage-reporter=text",
-		"profile:indexes": "bun run src/scripts/profile-indexes.ts"
+		"profile:indexes": "bun run src/scripts/profile-indexes.ts",
+		"user:flush": "bun run src/scripts/flush-users.ts"
 	},
 	"dependencies": {
 		"@elysiajs/cors": "^1.4.2",

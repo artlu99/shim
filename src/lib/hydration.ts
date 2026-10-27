@@ -55,6 +55,10 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 		const user: User = {
 			fid,
 			username: hubUser?.username ?? null,
+			// Stale lmdis entries predate these fields — degrade to null/[],
+			// never pretend the hub answered.
+			fname: hubUser?.fname ?? null,
+			attestations: hubUser?.attestations ?? [],
 			displayName: hubUser?.displayName ?? null,
 			pfpUrl: hubUser?.pfpUrl ?? null,
 			bio: hubUser?.bio ?? null,
