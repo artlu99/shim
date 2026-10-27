@@ -5,7 +5,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
-    # debug binding only — cloudflared reaches the app over the compose network
+    # LOAD-BEARING binding: the host's existing cloudflared (remotely-managed
+    # systemd service) ingress targets http://localhost:7300. Do not remove.
     ports:
       - "127.0.0.1:7300:3000"
     depends_on:
@@ -73,13 +74,6 @@ services:
       start_period: 5s
       retries: 3
     # no ports: reachable only on the compose network
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
-    depends_on:
-      - app
 
 volumes:
   pgdata:
