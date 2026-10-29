@@ -1,8 +1,9 @@
 import { swagger } from "@elysiajs/swagger";
 import { Elysia } from "elysia";
 
-const IS_DEBUGGING = process.env.NODE_ENV !== "production";
-const url = IS_DEBUGGING ? "http://localhost:3000" : "https://shim.artlu.xyz";
+// sh: no `servers` entry — OpenAPI defaults to the serving origin, so /docs
+// always targets whichever host renders it (dev / Render / potato). Upstream
+// hardcoded https://shim.artlu.xyz here in production.
 
 export const docs = new Elysia().use(
 	swagger({
@@ -22,7 +23,6 @@ export const docs = new Elysia().use(
 					url: "https://opensource.org/licenses/MIT",
 				},
 			},
-			servers: [{ url }],
 			tags: [
 				{ name: "Status", description: "Status endpoints" },
 				{ name: "Feed", description: "Feed endpoints" },
