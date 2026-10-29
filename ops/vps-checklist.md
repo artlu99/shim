@@ -14,10 +14,13 @@ TUNNEL_TOKEN — ingress is a dashboard public hostname -> http://localhost:7300
 - [ ] `apt install -y sysstat && iostat -x 1 5` — disk sanity for LMDB + PG
 
 ## Setup
-- [ ] `bash ops/swap-setup.sh` (2G swapfile + docker + sibling checkouts
-      /opt/shim@sh and /opt/lmdis; script runs as root)
-- [ ] `sudo chown -R "$USER":"$USER" /opt/shim /opt/lmdis` — then do ALL git/
-      compose work as that one user (mixing root/user caused FETCH_HEAD EACCES)
+- [ ] `sudo bash ops/swap-setup.sh` (2G swapfile + docker + docker group for the
+      invoking user + chown of /opt/shim and /opt/lmdis + sibling checkouts
+      /opt/shim@sh and /opt/lmdis) — then RE-LOGIN (docker group needs a new session)
+- [ ] If the box was set up with the OLD script version: do the docker group +
+      chown manually — `sudo usermod -aG docker "$USER"` (re-login) and
+      `sudo chown -R "$USER":"$USER" /opt/shim /opt/lmdis`
+- [ ] `git status -sb` on /opt/shim must read `## sh...origin/sh` and `git pull` must NOT hit EACCES
 - [ ] No `bun install` on the host — deps install inside the image build
 - [ ] Stage `/opt/shim/.env` from `.env.sh.example` (editor, NOT shell history):
   - PG_PASSWORD (openssl rand -hex 16) — DATABASE_URL password MUST equal it

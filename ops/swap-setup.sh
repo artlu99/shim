@@ -31,10 +31,26 @@ else
 fi
 docker compose version
 
-# 3. Sibling checkout for the lmdis build context (compose builds ../lmdis)
+# 3. Docker group for the invoking user — socket access without sudo.
+#    Group membership applies only to NEW login sessions; the script says so.
+INVOKER="${SUDO_USER:-$USER}"
+if [ "$INVOKER" != "root" ] && ! id -nG "$INVOKER" | grep -qw docker; then
+	usermod -aG docker "$INVOKER"
+	echo "NOTE: added $INVOKER to the docker group — LOG OUT AND BACK IN"
+	echo "      (or run 'newgrp docker') before any docker compose command"
+fi
+
+# 4. Sibling checkout for the lmdis build context (compose builds ../lmdis)
 cd /opt
 [ -d shim ] || git clone https://github.com/artlu99/shim shim
 [ -d lmdis ] || git clone https://github.com/artlu99/lmdis lmdis
 cd /opt/shim && git checkout sh
 
+# 5. Own the deploy tree — the script runs as root, but deploys must not:
+#    root-owned checkouts caused FETCH_HEAD / mkdir EACCES on this box once.
+if [ "$INVOKER" != "root" ]; then
+	chown -R "$INVOKER":"$INVOKER" /opt/shim /opt/lmdis
+fi
+
 echo "Next: stage /opt/shim/.env (see .env.sh.example), then: docker compose up -d --build"
+echo "If you were just added to the docker group: re-login first (or: newgrp docker)."
