@@ -4,6 +4,7 @@ import type {
 	SignerOnChainEvent,
 	UserDataAddMessage,
 	UserNameProof,
+	VerificationAddAddressMessage,
 } from "@farcaster/core";
 
 export type {
@@ -12,6 +13,7 @@ export type {
 	SignerOnChainEvent,
 	UserDataAddMessage,
 	UserNameProof,
+	VerificationAddAddressMessage,
 };
 
 export type PaginatedMessagesResponse<T> = {

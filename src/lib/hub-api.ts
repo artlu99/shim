@@ -2,6 +2,7 @@ import { fetcher } from "itty-fetcher";
 import { retry, sift } from "radash";
 import { VERBOSE_LOGGING } from "../constants";
 import type { User } from "../types";
+import type { Hex } from "viem";
 import type {
 	CastAddMessage,
 	LinkAddMessage,
@@ -9,6 +10,7 @@ import type {
 	SignerOnChainEvent,
 	UserDataAddMessage,
 	UserNameProof,
+	VerificationAddAddressMessage,
 } from "./farcaster-types";
 import redis, { Ttl } from "./redis";
 
@@ -316,6 +318,64 @@ export const getSignersByFid = async (
 	} catch (error) {
 		console.error(
 			"Error fetching signers by fid:",
+			fid,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+		return undefined;
+	}
+};
+
+/**
+ * Every ETH address the fid has proven ownership of on the hub, lowercased
+ * and deduped. Solana verifications are filtered out. undefined = the hub
+ * lookup itself failed; [] = the fid has no ETH verifications. The body
+ * typing is a white lie because it was deserialized over http (protobuf
+ * JSON emits the protocol enum as its name string, and the address as a
+ * 0x-prefixed hex string rather than bytes).
+ */
+export const getVerifiedEthAddressesByFid = async (
+	fid: number,
+): Promise<Hex[] | undefined> => {
+	try {
+		const messages = await cachedFetcherPaginatedGet<VerificationAddAddressMessage>(
+			`/v1/verificationsByFid?fid=${fid}`,
+			Ttl.MEDIUM,
+		);
+		const addresses = sift(
+			messages.map((m) => {
+				const body = (
+					m as unknown as {
+						data: {
+							verificationAddAddressBody?: {
+								address?: unknown;
+								protocol?: unknown;
+							};
+						};
+					}
+				).data.verificationAddAddressBody;
+				if (
+					!body ||
+					typeof body.address !== "string" ||
+					!/^0x[0-9a-fA-F]{40}$/.test(body.address)
+				) {
+					return undefined;
+				}
+				// protocol may be the explicit enum name or omitted entirely
+				// (protobuf default = PROTOCOL_ETHEREUM); the 0x shape check
+				// above already excludes solana addresses
+				if (
+					body.protocol !== undefined &&
+					body.protocol !== "PROTOCOL_ETHEREUM"
+				) {
+					return undefined;
+				}
+				return body.address.toLowerCase() as Hex;
+			}),
+		);
+		return [...new Set(addresses)];
+	} catch (error) {
+		console.error(
+			"Error fetching verified eth addresses by fid:",
 			fid,
 			error instanceof Error ? error.message : JSON.stringify(error),
 		);
