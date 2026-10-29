@@ -6,11 +6,17 @@ describe("Social Contract Routes", () => {
 	const app = new Elysia().use(socialContract);
 
 	describe("GET /signed/:fid", () => {
-		it("should get social contract signature by fid", async () => {
-			const testCases = [
+		// live suite: cold lmdis caches fan each fid out over the hub
+		// (verifications) + Base RPC (balanceOf) — well past bun's 5s default
+		it(
+			"should get social contract signature by fid",
+			async () => {
+				const testCases = [
 				// live values at authoring time — these drift as accounts sign
 				{ fid: 2, expectedSigned: true }, // varun (yes)
-				{ fid: 3, expectedSigned: false }, // dwr (no)
+				// dwr (yes — minted to non-primary verified address 0x187c…8899;
+				// false-negatived by the old primary-only check)
+				{ fid: 3, expectedSigned: true },
 				{ fid: 194, expectedSigned: true }, // rish (yes)
 				{ fid: 2904, expectedSigned: false }, // wake (no)
 				{ fid: 3854, expectedSigned: true }, // darrylyeo (yes)
@@ -33,6 +39,8 @@ describe("Social Contract Routes", () => {
 				expect(data.success).toBe(true);
 				expect(data.signed).toBe(expectedSigned);
 			}
-		});
+			},
+			60_000,
+		);
 	});
 });
