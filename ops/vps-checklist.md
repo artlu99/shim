@@ -37,7 +37,29 @@ TUNNEL_TOKEN — ingress is a dashboard public hostname -> http://localhost:7300
 - [ ] Zero Trust -> Networks -> Tunnels -> the EXISTING tunnel -> Public
       Hostname -> Add: hostname `shim.<yourdomain>` -> service `http://localhost:7300`
       (7300 = host side of the app's loopback binding; load-bearing)
-- [ ] Optional: CF Access self-hosted app scoped to path `/refresh*`
+- [ ] Optional: CF Access self-hosted app scoped to path `/refresh*` — gates the
+      only mutating route. Full walkthrough:
+  1. Zero Trust -> Access -> Applications -> Add -> Self-hosted
+     - name `shim-refresh`; session duration 24h (or 1 month for convenience)
+     - public domain: subdomain `shim`, domain `<yourdomain>`, path `refresh`
+       (prefix match — covers /refresh and anything under it)
+  2. Next screen, Add a policy: name `me`, Action Allow, Include -> Emails ->
+       <you> — login method One-time PIN is the zero-config default (code lands
+       in your inbox); swap/add Google/GitHub SSO if preferred
+  3. Effect: unauthenticated requests to /refresh* are answered at the edge by
+     the `<team>.cloudflareaccess.com` login page; the origin never sees them.
+     The in-process refresh-fids cron bypasses CF entirely — hourly refresh is
+     unaffected by this gate.
+  4. Verify from OUTSIDE your normal session: `curl -I https://shim.<domain>/refresh`
+     -> expect 302 redirect to cloudflareaccess.com (not 200/404 from the app)
+  5. Scripted/machine access later (the login page breaks plain curl):
+     Zero Trust -> Access -> Service Auth -> create a Service Token, add a
+     policy (Include -> Service Token) to the same app, then send headers
+     `CF-Access-Client-Id` + `CF-Access-Client-Secret` on the request
+  6. localhost:7300 is unaffected — Access lives at the edge only
+  7. Optional hardening: the origin receives `Cf-Access-Jwt-Assertion` on gated
+     requests; shim does not validate it (acceptable — the gate is unauthenticated-
+     strangers, not forged headers from someone already inside your tunnel)
 
 ## Deploy + verify
 - [ ] `docker compose config --quiet && docker compose up -d --build`
