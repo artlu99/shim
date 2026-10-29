@@ -108,7 +108,12 @@ app.get(
 	"/llms.txt",
 	async () => {
 		if (cachedMarkdown) return cachedMarkdown;
-		const res = await app.handle(new Request("http://localhost/docs/json"));
+		// Render the spec against the canonical host: the generated markdown
+		// bakes in a Servers section, and this cache is a single slot, so the
+		// content must not depend on which host requests it first.
+		const res = await app.handle(
+			new Request("https://shim.artlu.xyz/docs/json"),
+		);
 		const spec = (await res.json()) as Parameters<
 			typeof createMarkdownFromOpenApi
 		>[0];
