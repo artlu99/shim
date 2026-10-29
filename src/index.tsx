@@ -85,7 +85,7 @@ const app = new Elysia()
 					<h1>
 						view <a href="/docs">API documentation</a>
 					</h1>
-					<div>Bun Elysia 🦊 deployed on Render</div>
+					<div>Bun Elysia 🦊 deployed on a potato VPS</div>
 					<h4>
 						FOSS on{" "}
 						<a
