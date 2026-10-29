@@ -72,6 +72,19 @@ TUNNEL_TOKEN — ingress is a dashboard public hostname -> http://localhost:7300
       `docker compose exec lmdis curl -s -H "Authorization: Bearer $LMDIS_REST_TOKEN" localhost:3000/metrics | grep -E 'lmdis_lmdb_disk_bytes|lmdis_sweep_errors'`
 - [ ] Soak 48h: no OOM/restart loops (`docker compose ps`, `free -h`, `docker stats`)
 
+## Reboot drill (once, after first healthy deploy)
+- [ ] `sudo reboot` -> re-login and verify:
+  - `systemctl is-enabled docker containerd` — both "enabled" (default install)
+  - `docker compose ps` — app/postgres/lmdis all "Up" (restart: unless-stopped)
+  - `curl localhost:7300/health` -> OK; public hostname healthy again
+  - `free -h` — swap shows 2G again (fstab entry)
+  - Rules to remember: `docker compose stop` + reboot = stays stopped until
+    `docker compose start`; `docker compose down` DELETES containers (volumes
+    survive) — after down, a reboot restores nothing until `up -d` again.
+  - depends_on health-gating applies at `up` time only; at boot all three start
+    together — a few failed app queries in the first seconds are expected and
+    harmless (handles are lazy; nothing crashes).
+
 ## Cutover (zero-flip)
 - [ ] `shim.<yourdomain>` is a NEW hostname — Render keeps serving its own URL
       untouched; there is NO DNS flip. Decommission Render only when satisfied.
