@@ -23,3 +23,8 @@ export const REFRESH_CASTS_SIZE = 500;
 
 // hub rpc
 export const HUB_RPC_DEADLINE_MS = 10_000;
+
+// fan-out batching: async fetch bursts (feed hydration, mention hydration,
+// stats usernames) go through mapBatch in chunks of this size instead of
+// one unbounded Promise.all
+export const HTTP_FAN_OUT_BATCH_SIZE = 20;

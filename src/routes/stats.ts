@@ -1,6 +1,8 @@
 import { Elysia, t } from "elysia";
+import { HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import { getUsernameByFid } from "../lib/hub-api";
 import { getStats } from "../lib/postgres";
+import { mapBatch } from "../lib/util";
 
 const formatTimestamp = (ts: string) =>
 	new Date(Number(ts) * 1000).toISOString();
@@ -22,8 +24,9 @@ export const stats = new Elysia().get(
 						dbStats.total?.latest ? dbStats.total.latest.toString() : "0",
 					),
 				},
-				top: await Promise.all(
-					dbStats.topFids.map(async (tf) => {
+				top: await mapBatch(
+					dbStats.topFids,
+					async (tf) => {
 						const username = await getUsernameByFid(tf.fid);
 						return {
 							...tf,
@@ -31,7 +34,8 @@ export const stats = new Elysia().get(
 							latest: formatTimestamp((tf.latest as string).toString()),
 							username,
 						};
-					}),
+					},
+					HTTP_FAN_OUT_BATCH_SIZE,
 				),
 			},
 		};

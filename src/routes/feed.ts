@@ -1,10 +1,11 @@
 import { Elysia, t } from "elysia";
 import { sift } from "radash";
-import { FEED_DEFAULT_PAGE_SIZE } from "../constants";
+import { FEED_DEFAULT_PAGE_SIZE, HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import { getCastById, rawChannelFeed } from "../lib/hub-grpc";
 import { getSentFromBySignerKey, getUserByFid } from "../lib/hydration";
 import { getReverseChronFeed } from "../lib/postgres";
 import redis, { Ttl } from "../lib/redis";
+import { mapBatch } from "../lib/util";
 import {
 	getChannel,
 	getChannelBannedUsers,
@@ -43,7 +44,7 @@ async function fetchAndHydrateFeed(
 		(cast) => !bannedUserFids.includes(cast.fid),
 	);
 
-	return Promise.all(filteredCasts.map(hydrateCast));
+	return mapBatch(filteredCasts, hydrateCast, HTTP_FAN_OUT_BATCH_SIZE);
 }
 
 export const postReverseChronFeed = new Elysia().post(
@@ -63,8 +64,9 @@ export const postReverseChronFeed = new Elysia().post(
 		);
 
 		const feed: HydratedCast[] = sift(
-			await Promise.all(
-				feedIdentifiers.map(async (fi) => {
+			await mapBatch(
+				feedIdentifiers,
+				async (fi) => {
 					const cast = await getCastById(
 						fi.fid,
 						`0x${fi.hash.replace("0x", "")}`,
@@ -89,7 +91,8 @@ export const postReverseChronFeed = new Elysia().post(
 						sentBy,
 					};
 					return hydratedCast;
-				}),
+				},
+				HTTP_FAN_OUT_BATCH_SIZE,
 			),
 		);
 
