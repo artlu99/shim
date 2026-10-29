@@ -1,7 +1,9 @@
+import { HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import type { User } from "../types";
 import { getHubUserByFid } from "./hub-api";
 import { getProNftDetails } from "./pro-nft";
 import redis, { Ttl } from "./redis";
+import { mapBatch } from "./util";
 import { getUserPrimaryAddress } from "./warpcast";
 
 // status is time-derived (expires vs now), so it is recomputed on every
@@ -146,11 +148,13 @@ export const hydrateText = async (
 		return null;
 	}
 
-	const usernameMentions = await Promise.all(
-		(mentions ?? []).map(async (mention) => {
+	const usernameMentions = await mapBatch(
+		mentions ?? [],
+		async (mention) => {
 			const user = await getHubUserByFid(mention);
 			return user?.username ?? "<unknown>";
-		}),
+		},
+		HTTP_FAN_OUT_BATCH_SIZE,
 	);
 
 	const byteArray = new TextEncoder().encode(text);

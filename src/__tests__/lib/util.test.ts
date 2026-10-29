@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { pluralize, uin8ArrayToHex, hexToUint8Array } from "../../lib/util";
+import {
+	hexToUint8Array,
+	mapBatch,
+	pluralize,
+	uin8ArrayToHex,
+} from "../../lib/util";
 
 describe("Utility Functions", () => {
 	describe("pluralize", () => {
@@ -178,6 +183,70 @@ describe("Utility Functions", () => {
 			const hex = uin8ArrayToHex(original);
 			const converted = hexToUint8Array(hex);
 			expect(converted).toEqual(original);
+		});
+	});
+
+	describe("mapBatch", () => {
+		it("should preserve input order regardless of completion order", async () => {
+			const items = [30, 10, 20];
+			const result = await mapBatch(
+				items,
+				async (ms) => {
+					await new Promise((r) => setTimeout(r, ms));
+					return ms;
+				},
+				2,
+			);
+			expect(result).toEqual([30, 10, 20]);
+		});
+
+		it("should never exceed the batch size in flight", async () => {
+			let inFlight = 0;
+			let peak = 0;
+			const items = Array.from({ length: 50 }, (_, i) => i);
+			const result = await mapBatch(
+				items,
+				async (n) => {
+					inFlight++;
+					peak = Math.max(peak, inFlight);
+					await new Promise((r) => setTimeout(r, 1));
+					inFlight--;
+					return n;
+				},
+				8,
+			);
+			expect(peak).toBeLessThanOrEqual(8);
+			expect(result).toEqual(items);
+		});
+
+		it("should process a trailing partial batch", async () => {
+			const items = Array.from({ length: 7 }, (_, i) => i);
+			const result = await mapBatch(
+				items,
+				async (n) => n * 2,
+				3,
+			);
+			expect(result).toEqual([0, 2, 4, 6, 8, 10, 12]);
+		});
+
+		it("should return an empty array for empty input", async () => {
+			const result = await mapBatch([], async (n: number) => n, 20);
+			expect(result).toEqual([]);
+		});
+
+		it("should reject when a batch member rejects", async () => {
+			await expect(
+				mapBatch(
+					[1, 2, 3],
+					async (n) => {
+						if (n === 2) {
+							throw new Error("boom");
+						}
+						return n;
+					},
+					2,
+				),
+			).rejects.toThrow("boom");
 		});
 	});
 });
