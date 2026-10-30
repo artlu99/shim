@@ -94,7 +94,19 @@ export type LmdisClientConfig = {
         headers: this.headers,
         body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { result?: T; error?: string; code?: string };
+      let data: { result?: T; error?: string; code?: string };
+      try {
+        data = (await res.json()) as { result?: T; error?: string; code?: string };
+      } catch (error) {
+        // shim-local: label the cache leg. Route-level catches previously
+        // logged cache-body parse failures identically to hub ones (bare
+        // "Failed to parse JSON", 2026-10-30 incident), making the two
+        // indistinguishable. Also covers non-JSON error pages, which
+        // previously threw before the !res.ok check could add the status.
+        throw new LmdisError(
+          `lmdis: response was not JSON (status ${res.status}): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       if (!res.ok) {
         throw new LmdisError(data.error ?? `request failed with status ${res.status}`);
       }

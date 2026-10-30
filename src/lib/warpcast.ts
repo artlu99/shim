@@ -7,6 +7,25 @@ import redis, { Ttl } from "./redis";
 
 const warpcastApi = fetcher({ base: "https://api.farcaster.xyz" });
 
+// Same attribution scheme as hub-api's hubFailure: cache-leg failures carry
+// the "lmdis:" prefix and hub calls are labeled "hub <uri>", so
+// api.farcaster.xyz failures are labeled "warpcast <uri>" — making any
+// route-level catch self-identifying about which upstream leg threw
+// (2026-10-30 incident logged both legs as bare "Failed to parse JSON").
+// itty-fetcher's errors are not Error instances in this runtime, so status
+// is sniffed off any object shape.
+const warpcastFailure = (uri: string, error: unknown): Error => {
+	const status =
+		typeof error === "object" && error !== null && "status" in error
+			? ` [${String((error as { status: unknown }).status)}]`
+			: "";
+	if (error instanceof Error) {
+		error.message = `warpcast ${uri}${status}: ${error.message}`;
+		return error;
+	}
+	return new Error(`warpcast ${uri}${status}: ${JSON.stringify(error)}`);
+};
+
 export interface FullChannel {
 	id: string;
 	url: string;
@@ -61,8 +80,8 @@ const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 				await cacheClient.set(cacheKey, JSON.stringify(null), { ex: ttl });
 				return null;
 			}
-			// For other errors, let retry handle it
-			throw error;
+			// For other errors, label the warpcast leg and let retry handle it
+			throw warpcastFailure(uri, error);
 		}
 	});
 

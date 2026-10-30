@@ -24,6 +24,25 @@ const hub = () => {
 	});
 };
 
+// Attribute hub-call failures at the source: cache-leg errors carry an
+// "lmdis:" prefix from LmdisClient, so anything else reaching a route-level
+// catch is the hub call itself — including bare "Failed to parse JSON" from
+// a 2xx response with a corrupt body (indistinguishable from a cache outage
+// in the 2026-10-30 logs). itty-fetcher attaches .status to its errors, but
+// in this runtime they are NOT Error instances (AGENTS.md note), so status
+// is sniffed off any object shape — the [200]-vs-[4xx] tell is the point.
+const hubFailure = (uri: string, error: unknown): Error => {
+	const status =
+		typeof error === "object" && error !== null && "status" in error
+			? ` [${String((error as { status: unknown }).status)}]`
+			: "";
+	if (error instanceof Error) {
+		error.message = `hub ${uri}${status}: ${error.message}`;
+		return error;
+	}
+	return new Error(`hub ${uri}${status}: ${JSON.stringify(error)}`);
+};
+
 const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 	const cacheClient = redis();
 	const cacheKey = `hub:${uri}`;
@@ -36,7 +55,13 @@ const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 
 	const res = await retry(
 		{ backoff: (i) => 10 ** i },
-		async () => await hub().get(uri),
+		async () => {
+			try {
+				return await hub().get(uri);
+			} catch (error) {
+				throw hubFailure(uri, error);
+			}
+		},
 	);
 
 	await cacheClient.set(cacheKey, JSON.stringify(res), { ex: ttl });
@@ -69,7 +94,13 @@ async function cachedFetcherPaginatedGet<T>(
 		const uri = `${baseUri}${baseUri.includes("?") ? "&" : "?"}pageSize=${pageSize}${nextPageToken ? `&pageToken=${nextPageToken}` : ""}`;
 		const res = await retry(
 			{ backoff: (i) => 10 ** i },
-			async () => await hub().get<PaginatedMessagesResponse<T>>(uri),
+			async () => {
+				try {
+					return await hub().get<PaginatedMessagesResponse<T>>(uri);
+				} catch (error) {
+					throw hubFailure(uri, error);
+				}
+			},
 		);
 
 		if (res.messages.length === 0) {
