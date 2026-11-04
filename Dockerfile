@@ -8,6 +8,13 @@ RUN bun install --production --frozen-lockfile
 COPY tsconfig.json ./
 COPY src ./src
 
+# SQLite store lives here (SQLITE_PATH=/app/data/shim.sqlite, compose volume
+# shimdata). The dir must EXIST and be owned by `bun` in the image: docker
+# seeds a fresh named volume by copying this path's ownership — a mount point
+# created at attach time would be root-owned and the app would die with
+# EACCES on first write.
+RUN mkdir -p /app/data && chown bun:bun /app/data
+
 ENV NODE_ENV=production
 ENV TZ=UTC
 ENV PORT=3000

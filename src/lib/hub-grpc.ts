@@ -17,7 +17,7 @@ import { livenessFids } from "../static/artlu";
 import type { Cast } from "../types";
 import type { CastAddMessage } from "./farcaster-types";
 import { hydrateText } from "./hydration";
-import { upsertCasts } from "./postgres";
+import { upsertCasts } from "./sqlite";
 import redis, { Ttl } from "./redis";
 import { hexToUint8Array, uin8ArrayToHex } from "./util";
 

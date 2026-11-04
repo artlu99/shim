@@ -3,7 +3,7 @@ import { URI_SEARCH_LOOKBACK } from "../constants";
 import { getHubFidByUsername } from "../lib/hub-api";
 import { getCastById, getCastsByFid } from "../lib/hub-grpc";
 import { getUserByFid } from "../lib/hydration";
-import { getCastByShortHash } from "../lib/postgres";
+import { getCastByShortHash } from "../lib/sqlite";
 import { getChannel, getChannelIdFromUrl } from "../lib/warpcast";
 import { type Cast, CastSchema } from "../types";
 

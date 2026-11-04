@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import { getUsernameByFid } from "../lib/hub-api";
-import { getStats } from "../lib/postgres";
+import { getStats } from "../lib/sqlite";
 import { mapBatch } from "../lib/util";
 
 const formatTimestamp = (ts: string) =>

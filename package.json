@@ -5,6 +5,7 @@
 		"start": "NODE_ENV=production bun src/index.tsx",
 		"test:coverage": "bun test --coverage --coverage-reporter=text",
 		"profile:indexes": "bun run src/scripts/profile-indexes.ts",
+		"backfill:sqlite": "bun run src/scripts/backfill-sqlite.ts",
 		"user:flush": "bun run src/scripts/flush-users.ts"
 	},
 	"dependencies": {

@@ -7,7 +7,7 @@ import {
 } from "../constants";
 import { getFollowingByFid, getHubFidByUsername } from "../lib/hub-api";
 import { getCastsByFid } from "../lib/hub-grpc";
-import { getLatestCastTimestamps } from "../lib/postgres";
+import { getLatestCastTimestamps } from "../lib/sqlite";
 
 export const processFids = async (allFids: number[]) => {
 	// incremental: users we already have casts for only pull new messages

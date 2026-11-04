@@ -5,15 +5,20 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    environment:
+      # SQLite store path on the shimdata volume below; .env must NOT set
+      # SQLITE_PATH (compose wins, but keep the two from drifting)
+      SQLITE_PATH: /app/data/shim.sqlite
     # LOAD-BEARING binding: the host's existing cloudflared (remotely-managed
     # systemd service) ingress targets http://localhost:7300. Do not remove.
     ports:
       - "127.0.0.1:7300:3000"
     depends_on:
-      postgres:
-        condition: service_healthy
       lmdis:
         condition: service_healthy
+    volumes:
+      # SQLite store (casts/follows) — survives container rebuilds and reboots
+      - shimdata:/app/data
     healthcheck:
       test:
         [
@@ -26,25 +31,6 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
-
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: shim
-      POSTGRES_PASSWORD: ${PG_PASSWORD:?set PG_PASSWORD in .env}
-      POSTGRES_DB: shim
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      # schema + partial indexes (plain CREATE INDEX — CONCURRENTLY is illegal
-      # inside the init-script transaction; only needed for live alteration)
-      - ./deploy/init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shim -d shim"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    # no ports: reachable only on the compose network
 
   lmdis:
     # requires a sibling checkout: git clone https://github.com/artlu99/lmdis ../lmdis
@@ -76,5 +62,5 @@ services:
     # no ports: reachable only on the compose network
 
 volumes:
-  pgdata:
+  shimdata:
   lmdisdata:

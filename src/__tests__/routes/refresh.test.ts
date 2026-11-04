@@ -18,9 +18,9 @@ describe("processFids", () => {
 		// into other test files' tests, since bun evaluates all files before
 		// running any)
 		const hubGrpc = await import("../../lib/hub-grpc");
-		const postgres = await import("../../lib/postgres");
+		const sqlite = await import("../../lib/sqlite");
 		getCastsByFidSpy = spyOn(hubGrpc, "getCastsByFid");
-		getLatestCastTimestampsSpy = spyOn(postgres, "getLatestCastTimestamps");
+		getLatestCastTimestampsSpy = spyOn(sqlite, "getLatestCastTimestamps");
 	});
 
 	afterAll(() => {

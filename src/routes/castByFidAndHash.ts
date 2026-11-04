@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { getCastById } from "../lib/hub-grpc";
 import { getUserByFid } from "../lib/hydration";
-import { getCastByHash, upsertCasts } from "../lib/postgres";
+import { getCastByHash, upsertCasts } from "../lib/sqlite";
 import { getChannel, getChannelIdFromUrl } from "../lib/warpcast";
 import { CastSchema } from "../types";
 

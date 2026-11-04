@@ -4,6 +4,8 @@ bun.lock
 
 .env
 
+data/
+
 AGENTS.md
 TODO.md
 PLAN.md

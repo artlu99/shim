@@ -3,7 +3,7 @@ import { sift } from "radash";
 import { FEED_DEFAULT_PAGE_SIZE, HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import { getCastById, rawChannelFeed } from "../lib/hub-grpc";
 import { getSentFromBySignerKey, getUserByFid } from "../lib/hydration";
-import { getReverseChronFeed } from "../lib/postgres";
+import { getReverseChronFeed } from "../lib/sqlite";
 import redis, { Ttl } from "../lib/redis";
 import { mapBatch } from "../lib/util";
 import {
