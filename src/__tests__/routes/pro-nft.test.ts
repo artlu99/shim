@@ -11,7 +11,7 @@ import {
 } from "../../lib/pro-nft";
 
 describe("Pro NFT hard sunset", () => {
-	it("getProNftDetails always returns undefined (no CSV/DB lookup)", async () => {
+	it("getProNftDetails always returns undefined (lookup retired)", async () => {
 		expect(await getProNftDetails(1077239)).toBeUndefined();
 		expect(await getProNftDetails(549521)).toBeUndefined();
 		expect(await getProNftDetails(1)).toBeUndefined();

@@ -4,8 +4,9 @@ import type { ProNftDetails } from "../types";
  * user.proNft hard sunset.
  *
  * Deprecated: 2026-11-07 — Pro is gone; stop serving real membership data.
- * Remove field after: 2026-12-07 (CSV snapshots, DATABASE_URL_PRO_NFT, this module).
- * Until then the field stays on the wire as null with the signals below.
+ * Remove field after: 2026-12-07 (DATABASE_URL_PRO_NFT, this module, User.proNft).
+ * MVR/DWR CSV snapshots already deleted. Until then the field stays on the
+ * wire as null with the signals below.
  */
 export const PRO_NFT_DEPRECATED_AT = "2026-11-07";
 export const PRO_NFT_REMOVE_AFTER = "2026-12-07";
@@ -42,7 +43,7 @@ export const withProNftDeprecation = <T extends Record<string, unknown>>(
 };
 
 /**
- * Always undefined: CSV / Ponder lookup retired on PRO_NFT_DEPRECATED_AT.
+ * Always undefined: membership lookup retired on PRO_NFT_DEPRECATED_AT.
  * Callers should treat a miss as proNft: null.
  */
 export const getProNftDetails = async (
