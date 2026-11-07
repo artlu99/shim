@@ -26,12 +26,12 @@ NO PG_PASSWORD; the schema + indexes auto-apply at first open.
 - [ ] No `bun install` on the host — deps install inside the image build
 - [ ] Stage `/opt/shim/.env` from `.env.sh.example` (editor, NOT shell history):
   - LMDIS_REST_TOKEN (openssl rand -hex 32) — UPSTASH_REDIS_REST_TOKEN MUST equal it
-  - DATABASE_URL_PRO_NFT — remote ponder secret (route stays)
   - DATABASE_URL — only if seeding from Neon via `backfill:sqlite`; the app
     itself never reads it
   - HUB_GRPC_ENDPOINT — current bare host:port from upstream .env.example
   - NO TUNNEL_TOKEN (existing host tunnel), NO DEV (inverted flag disables gRPC),
-    NO MY_VARIABLE (dead placeholder), NO SQLITE_PATH (compose sets it)
+    NO MY_VARIABLE (dead placeholder), NO SQLITE_PATH (compose sets it),
+    NO DATABASE_URL_PRO_NFT (Pro NFT removed)
 - [ ] `chmod 600 .env`
 - [ ] `docker compose config --quiet && echo "env OK"`
 
