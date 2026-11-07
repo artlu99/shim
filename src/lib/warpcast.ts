@@ -7,6 +7,25 @@ import redis, { Ttl } from "./redis";
 
 const warpcastApi = fetcher({ base: "https://api.farcaster.xyz" });
 
+// Same attribution scheme as hub-api's hubFailure: cache-leg failures carry
+// the "lmdis:" prefix and hub calls are labeled "hub <uri>", so
+// api.farcaster.xyz failures are labeled "warpcast <uri>" — making any
+// route-level catch self-identifying about which upstream leg threw
+// (2026-10-30 incident logged both legs as bare "Failed to parse JSON").
+// itty-fetcher's errors are not Error instances in this runtime, so status
+// is sniffed off any object shape.
+const warpcastFailure = (uri: string, error: unknown): Error => {
+	const status =
+		typeof error === "object" && error !== null && "status" in error
+			? ` [${String((error as { status: unknown }).status)}]`
+			: "";
+	if (error instanceof Error) {
+		error.message = `warpcast ${uri}${status}: ${error.message}`;
+		return error;
+	}
+	return new Error(`warpcast ${uri}${status}: ${JSON.stringify(error)}`);
+};
+
 export interface FullChannel {
 	id: string;
 	url: string;
@@ -42,13 +61,24 @@ interface ChannelBannedUserWarpcastApiResponse {
 	next: { cursor: string };
 }
 
+// lmdis cannot distinguish an absent key from a cached JSON null (both
+// deserialize to null, and the miss check is truthiness), so not-found is
+// cached as a sentinel object — a plain null write was never honored on read
+const NOT_FOUND = { warpcast404: true } as const;
+
 const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 	const cacheClient = redis();
 	const cacheKey = `warpcast:${uri}`;
 
 	const cacheResponse = await cacheClient.get(cacheKey);
 
-	if (cacheResponse) {
+	if (cacheResponse !== null && cacheResponse !== undefined) {
+		if (
+			typeof cacheResponse === "object" &&
+			"warpcast404" in (cacheResponse as object)
+		) {
+			return null;
+		}
 		return cacheResponse as T;
 	}
 
@@ -56,17 +86,31 @@ const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 		try {
 			return await warpcastApi.get(uri);
 		} catch (error) {
-			// If it's a 404, cache null and return it
-			if (error instanceof Error && "status" in error && error.status === 404) {
-				await cacheClient.set(cacheKey, JSON.stringify(null), { ex: ttl });
+			// 404 = "not found" (no primary address, no channel): cache the
+			// sentinel and return null. itty-fetcher's errors are NOT Error
+			// instances in this runtime (AGENTS.md), so the original
+			// `error instanceof Error` form never engaged — every miss
+			// retried 4x, was left uncached, and refetched on every request.
+			// Detect via the status property.
+			if (
+				typeof error === "object" &&
+				error !== null &&
+				"status" in error &&
+				(error as { status: unknown }).status === 404
+			) {
+				await cacheClient.set(cacheKey, NOT_FOUND, { ex: ttl });
 				return null;
 			}
-			// For other errors, let retry handle it
-			throw error;
+			// For other errors, label the warpcast leg and let retry handle it
+			throw warpcastFailure(uri, error);
 		}
 	});
 
-	await cacheClient.set(cacheKey, JSON.stringify(res), { ex: ttl });
+	// res === null only via the 404 branch, which already cached the
+	// sentinel — a plain null write here would never be honored on read
+	if (res !== null) {
+		await cacheClient.set(cacheKey, JSON.stringify(res), { ex: ttl });
+	}
 
 	return res as T;
 };
@@ -117,7 +161,7 @@ export const getChannel = async (
 			Ttl.LONG,
 		);
 
-		const fullChannel = res.result.channel;
+		const fullChannel = res?.result?.channel;
 
 		return fullChannel
 			? {
@@ -167,7 +211,9 @@ export const getChannelBannedUsers = async (channelId: string) => {
 			`/fc/channel-bans?channelId=${channelId}`,
 			Ttl.MEDIUM,
 		);
-		return res.result.bannedUsers;
+		// null = cached not-found (404): a channel that does not exist has
+		// no banned users
+		return res?.result?.bannedUsers ?? [];
 	} catch (error) {
 		console.error(
 			"Error fetching channel banned users:",

@@ -9,7 +9,6 @@ import {
 	spyOn,
 } from "bun:test";
 import * as hubApi from "../../lib/hub-api";
-import * as proNft from "../../lib/pro-nft";
 // Snapshot the real exports before mock.module. The namespace is a live
 // binding, so passing it back in afterAll would reinstall the mock.
 import * as realRedis from "../../lib/redis";
@@ -41,13 +40,6 @@ const mockUser1 = {
 	pfpUrl: null,
 	bio: null,
 	primaryAddress: null,
-	proNft: {
-		order: 10001,
-		subscribed_at: new Date(1234567890 * 1000).toISOString(),
-		expires_at: new Date(1234567891 * 1000).toISOString(),
-		status: "unsubscribed" as "unsubscribed" | "subscribed",
-		fid: mockFid,
-	},
 };
 
 const mockUser2 = {
@@ -59,18 +51,10 @@ const mockUser2 = {
 	pfpUrl: null,
 	bio: null,
 	primaryAddress: null,
-	proNft: {
-		order: 10002,
-		subscribed_at: new Date(1234567890 * 1000).toISOString(),
-		expires_at: new Date(1234567891 * 1000).toISOString(),
-		status: "unsubscribed" as "unsubscribed" | "subscribed",
-		fid: mockFid + 1,
-	},
 };
 
 // Create spies that we can configure per test
 const hubUserSpy = spyOn(hubApi, "getHubUserByFid");
-const proNftSpy = spyOn(proNft, "getProNftDetails");
 const primaryAddressSpy = spyOn(warpcast, "getUserPrimaryAddress");
 
 describe("Hydration Functions", () => {
@@ -105,18 +89,15 @@ describe("Hydration Functions", () => {
 		userCacheStore.clear();
 
 		hubUserSpy.mockReset();
-		proNftSpy.mockReset();
 		primaryAddressSpy.mockReset();
 
 		hubUserSpy.mockResolvedValue(undefined);
-		proNftSpy.mockResolvedValue(undefined);
 		primaryAddressSpy.mockResolvedValue(undefined);
 	});
 
 	afterAll(() => {
 		mock.module("../../lib/redis", () => originalRedis);
 		hubUserSpy.mockRestore();
-		proNftSpy.mockRestore();
 		primaryAddressSpy.mockRestore();
 	});
 
@@ -130,18 +111,10 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: "Test bio",
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			const mockPrimaryAddress = "0x1234567890abcdef" as `0x${string}`;
-
-			const mockProNftDetails = {
-				fid: mockFid,
-				order: 1,
-				timestamp: 1234567890,
-				expires: 1234567891,
-			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
 			primaryAddressSpy.mockResolvedValue({
@@ -149,13 +122,11 @@ describe("Hydration Functions", () => {
 				protocol: "ethereum",
 				address: mockPrimaryAddress,
 			});
-			proNftSpy.mockResolvedValue(mockProNftDetails);
 
 			const result = await getUserByFid(123);
 
 			expect(hubUserSpy).toHaveBeenCalledWith(123);
 			expect(primaryAddressSpy).toHaveBeenCalledWith(123);
-			expect(proNftSpy).toHaveBeenCalledWith(123);
 
 			expect(result).toEqual({
 				fid: 123,
@@ -165,20 +136,13 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: "Test bio",
-				primaryAddress: mockPrimaryAddress,
-				proNft: {
-					order: 1,
-					subscribed_at: new Date(1234567890 * 1000).toISOString(),
-					expires_at: new Date(1234567891 * 1000).toISOString(),
-					status: "unsubscribed" as "unsubscribed" | "subscribed",
-				},
+				primaryAddress: mockPrimaryAddress
 			});
 		});
 
 		it("should handle missing hub user data", async () => {
 			hubUserSpy.mockResolvedValue(undefined);
 			primaryAddressSpy.mockResolvedValue(undefined);
-			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
 
@@ -190,8 +154,7 @@ describe("Hydration Functions", () => {
 				displayName: null,
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			});
 		});
 
@@ -204,13 +167,11 @@ describe("Hydration Functions", () => {
 				displayName: null,
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
 			primaryAddressSpy.mockResolvedValue(undefined);
-			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
 
@@ -222,8 +183,7 @@ describe("Hydration Functions", () => {
 				displayName: null,
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			});
 		});
 
@@ -236,39 +196,15 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: "Test bio",
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
 			primaryAddressSpy.mockResolvedValue(undefined);
-			proNftSpy.mockResolvedValue(undefined);
 
 			const result = await getUserByFid(123);
 
 			expect(result.primaryAddress).toBeNull();
-		});
-
-		it("should handle missing pro NFT details", async () => {
-			const mockHubUser = {
-				fid: mockFid,
-				username: "testuser",
-				fname: "testuser",
-				attestations: [],
-				displayName: "Test User",
-				pfpUrl: null,
-				bio: "Test bio",
-				primaryAddress: null,
-				proNft: null,
-			};
-
-			hubUserSpy.mockResolvedValue(mockHubUser);
-			primaryAddressSpy.mockResolvedValue(undefined);
-			proNftSpy.mockResolvedValue(undefined);
-
-			const result = await getUserByFid(123);
-
-			expect(result.proNft).toBeNull();
 		});
 
 		it("should serve repeat calls from cache without refetching", async () => {
@@ -280,14 +216,12 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
 			// null is a successful "no address" result; undefined is a fetch failure
 			primaryAddressSpy.mockResolvedValue(null);
-			proNftSpy.mockResolvedValue(undefined);
 
 			const first = await getUserByFid(123);
 
@@ -299,7 +233,6 @@ describe("Hydration Functions", () => {
 			// each underlying fetcher ran exactly once despite two calls
 			expect(hubUserSpy).toHaveBeenCalledTimes(1);
 			expect(primaryAddressSpy).toHaveBeenCalledTimes(1);
-			expect(proNftSpy).toHaveBeenCalledTimes(1);
 			expect(second).toEqual(first);
 		});
 
@@ -312,14 +245,12 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
 			// null is a successful "no address" result; undefined is a fetch failure
 			primaryAddressSpy.mockResolvedValue(null);
-			proNftSpy.mockResolvedValue(undefined);
 
 			const [first, second] = await Promise.all([
 				getUserByFid(123),
@@ -328,21 +259,18 @@ describe("Hydration Functions", () => {
 
 			expect(hubUserSpy).toHaveBeenCalledTimes(1);
 			expect(primaryAddressSpy).toHaveBeenCalledTimes(1);
-			expect(proNftSpy).toHaveBeenCalledTimes(1);
 			expect(second).toEqual(first);
 		});
 
 		it("should not cache a missing hub user", async () => {
 			hubUserSpy.mockResolvedValue(undefined);
 			primaryAddressSpy.mockResolvedValue(null);
-			proNftSpy.mockResolvedValue(undefined);
 
 			await getUserByFid(123);
 			await getUserByFid(123);
 
 			expect(hubUserSpy).toHaveBeenCalledTimes(2);
 			expect(primaryAddressSpy).toHaveBeenCalledTimes(2);
-			expect(proNftSpy).toHaveBeenCalledTimes(2);
 			expect(userCacheStore.has("user:123")).toBe(false);
 		});
 
@@ -355,23 +283,19 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			});
 			primaryAddressSpy.mockResolvedValue(undefined);
-			proNftSpy.mockResolvedValue(undefined);
 
 			await getUserByFid(123);
 			await getUserByFid(123);
 
 			expect(hubUserSpy).toHaveBeenCalledTimes(2);
 			expect(primaryAddressSpy).toHaveBeenCalledTimes(2);
-			expect(proNftSpy).toHaveBeenCalledTimes(2);
 			expect(userCacheStore.has("user:123")).toBe(false);
 		});
 
-		it("should recompute pro status on cache hits so expiry is never stale", async () => {
-			// simulate a user cached while their pro was still active
+		it("should strip legacy proNft from cache hits", async () => {
 			userCacheStore.set(
 				`user:${mockFid}`,
 				JSON.stringify({
@@ -386,19 +310,17 @@ describe("Hydration Functions", () => {
 					proNft: {
 						order: 1,
 						subscribed_at: new Date(Date.now() - 86_400_000).toISOString(),
-						expires_at: new Date(Date.now() - 60_000).toISOString(), // expired 1 min ago
-						status: "subscribed", // stale value from cache-time
+						expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+						status: "subscribed",
 					},
 				}),
 			);
 
 			const result = await getUserByFid(mockFid);
 
-			// served from cache — no underlying fetches
 			expect(hubUserSpy).not.toHaveBeenCalled();
 			expect(primaryAddressSpy).not.toHaveBeenCalled();
-			expect(proNftSpy).not.toHaveBeenCalled();
-			expect(result.proNft?.status).toBe("unsubscribed");
+			expect(result).not.toHaveProperty("proNft");
 		});
 	});
 
@@ -483,8 +405,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			hubUserSpy.mockResolvedValue(mockUser);
