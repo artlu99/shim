@@ -4,12 +4,13 @@ import { getHubFidByUsername } from "../lib/hub-api";
 import { getCastById, getCastsByFid } from "../lib/hub-grpc";
 import { getUserByFid } from "../lib/hydration";
 import { getCastByShortHash } from "../lib/postgres";
+import { withProNftDeprecation } from "../lib/pro-nft";
 import { getChannel, getChannelIdFromUrl } from "../lib/warpcast";
 import { type Cast, CastSchema } from "../types";
 
 export const getCastByWarpcastUri = new Elysia().get(
 	"/wc/:username/:shortHash",
-	async ({ params: { username, shortHash } }) => {
+	async ({ params: { username, shortHash }, set }) => {
 		const fid = await getHubFidByUsername(username);
 		if (!fid) {
 			return {
@@ -52,10 +53,10 @@ export const getCastByWarpcastUri = new Elysia().get(
 			: undefined;
 		const channel = channelId ? await getChannel(channelId) : undefined;
 
-		return {
+		return withProNftDeprecation(set, {
 			success: true,
 			cast: { ...cast, user, channel },
-		};
+		});
 	},
 	{
 		params: t.Object({

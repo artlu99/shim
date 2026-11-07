@@ -62,6 +62,7 @@ export interface User {
 	pfpUrl: string | null;
 	bio: string | null;
 	primaryAddress: `0x${string}` | null;
+	/** @deprecated 2026-11-07 — always null; remove after 2026-12-07 (see lib/pro-nft.ts) */
 	proNft: {
 		order: number;
 		subscribed_at: string;

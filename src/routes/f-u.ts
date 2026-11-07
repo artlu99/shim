@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { getHubFidByUsername, getUsernameByFid } from "../lib/hub-api";
 import { getUserByFid } from "../lib/hydration";
+import { withProNftDeprecation } from "../lib/pro-nft";
 
 export const fu = new Elysia()
 	.get(
@@ -69,12 +70,12 @@ export const fu = new Elysia()
 	)
 	.get(
 		"/user/:fid",
-		async ({ params: { fid } }) => {
+		async ({ params: { fid }, set }) => {
 			const user = await getUserByFid(fid);
-			return {
+			return withProNftDeprecation(set, {
 				success: true,
 				user,
-			};
+			});
 		},
 		{
 			params: t.Object({
@@ -90,6 +91,7 @@ export const fu = new Elysia()
 							"application/json": {
 								schema: t.Object({
 									success: t.Boolean(),
+									warnings: t.Array(t.String()),
 									user: Object({
 										fid: t.Number(),
 										username: t.Union([t.String(), t.Null()]),
@@ -98,6 +100,7 @@ export const fu = new Elysia()
 										displayName: t.String(),
 										pfpUrl: t.String(),
 										primaryAddress: t.String(),
+										// deprecated 2026-11-07; always null; remove after 2026-12-07
 										proNft: t.Nullable(
 											t.Object({
 												order: t.Number(),

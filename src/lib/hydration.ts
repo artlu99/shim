@@ -1,21 +1,15 @@
 import { HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import type { User } from "../types";
 import { getHubUserByFid } from "./hub-api";
-import { getProNftDetails } from "./pro-nft";
 import redis, { Ttl } from "./redis";
 import { mapBatch } from "./util";
 import { getUserPrimaryAddress } from "./warpcast";
 
-// status is time-derived (expires vs now), so it is recomputed on every
-// read — including cache hits — instead of being frozen with the cache
-const proStatus = (expiresAt: string): "subscribed" | "unsubscribed" =>
-	Date.parse(expiresAt) > Date.now() ? "subscribed" : "unsubscribed";
-
-const withFreshProStatus = (user: User): User => ({
+// Hard sunset 2026-11-07: user.proNft is always null (see ./pro-nft.ts).
+// Strip any stale Redis value so cache hits cannot resurrect membership data.
+const withoutProNft = (user: User): User => ({
 	...user,
-	proNft: user.proNft
-		? { ...user.proNft, status: proStatus(user.proNft.expires_at) }
-		: null,
+	proNft: null,
 });
 
 // lmdis returns the raw string when JSON.parse fails, so verify the
@@ -31,7 +25,7 @@ const inFlight = new Map<number, Promise<User>>();
 export const getUserByFid = async (fid: number): Promise<User> => {
 	const pending = inFlight.get(fid);
 	if (pending) {
-		return withFreshProStatus(await pending);
+		return withoutProNft(await pending);
 	}
 
 	const fetchUser = (async (): Promise<User> => {
@@ -48,10 +42,9 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 			);
 		}
 
-		const [hubUser, primaryAddress, proNftDetails] = await Promise.all([
+		const [hubUser, primaryAddress] = await Promise.all([
 			getHubUserByFid(fid),
 			getUserPrimaryAddress(fid),
-			getProNftDetails(fid),
 		]);
 
 		const user: User = {
@@ -65,18 +58,8 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 			pfpUrl: hubUser?.pfpUrl ?? null,
 			bio: hubUser?.bio ?? null,
 			primaryAddress: primaryAddress?.address ?? null,
-			proNft: proNftDetails
-				? {
-						order: proNftDetails.order,
-						subscribed_at: new Date(
-							proNftDetails.timestamp * 1000,
-						).toISOString(),
-						expires_at: new Date(proNftDetails.expires * 1000).toISOString(),
-						status: proStatus(
-							new Date(proNftDetails.expires * 1000).toISOString(),
-						),
-					}
-				: null,
+			// Pro NFT lookup retired; field kept null until remove-after date.
+			proNft: null,
 		};
 
 		// undefined hub user and undefined primary address are fetch failures
@@ -102,7 +85,7 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 	inFlight.set(fid, fetchUser);
 
 	try {
-		return withFreshProStatus(await fetchUser);
+		return withoutProNft(await fetchUser);
 	} finally {
 		inFlight.delete(fid);
 	}
