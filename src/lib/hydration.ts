@@ -6,7 +6,10 @@ import { mapBatch } from "./util";
 import { getUserPrimaryAddress } from "./warpcast";
 
 // Drop legacy user.proNft from Redis hits written before the field was removed.
-const withoutLegacyProNft = (user: User & { proNft?: unknown }): User => {
+// Also used for nested users inside channelFeed:* cache entries.
+export const stripLegacyProNft = (
+	user: User & { proNft?: unknown },
+): User => {
 	const { proNft: _removed, ...rest } = user;
 	return rest;
 };
@@ -24,7 +27,7 @@ const inFlight = new Map<number, Promise<User>>();
 export const getUserByFid = async (fid: number): Promise<User> => {
 	const pending = inFlight.get(fid);
 	if (pending) {
-		return withoutLegacyProNft(await pending);
+		return stripLegacyProNft(await pending);
 	}
 
 	const fetchUser = (async (): Promise<User> => {
@@ -82,7 +85,7 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 	inFlight.set(fid, fetchUser);
 
 	try {
-		return withoutLegacyProNft(await fetchUser);
+		return stripLegacyProNft(await fetchUser);
 	} finally {
 		inFlight.delete(fid);
 	}

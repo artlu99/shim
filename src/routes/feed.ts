@@ -2,7 +2,11 @@ import { Elysia, t } from "elysia";
 import { sift } from "radash";
 import { FEED_DEFAULT_PAGE_SIZE, HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import { getCastById, rawChannelFeed } from "../lib/hub-grpc";
-import { getSentFromBySignerKey, getUserByFid } from "../lib/hydration";
+import {
+	getSentFromBySignerKey,
+	getUserByFid,
+	stripLegacyProNft,
+} from "../lib/hydration";
 import { getReverseChronFeed } from "../lib/postgres";
 import redis, { Ttl } from "../lib/redis";
 import { mapBatch } from "../lib/util";
@@ -152,7 +156,10 @@ export const getReverseChronChannelFeed = new Elysia().get(
 		// Get cached data if available
 		const cacheResponse = await cacheClient.get(cacheKey);
 		let feed: HydratedCast[] = cacheResponse
-			? (cacheResponse as HydratedCast[])
+			? (cacheResponse as HydratedCast[]).map((cast) => ({
+					...cast,
+					user: stripLegacyProNft(cast.user),
+				}))
 			: [];
 
 		// If we have cached data, trigger background revalidation
