@@ -40,13 +40,6 @@ const mockUser1 = {
 	pfpUrl: null,
 	bio: null,
 	primaryAddress: null,
-	proNft: {
-		order: 10001,
-		subscribed_at: new Date(1234567890 * 1000).toISOString(),
-		expires_at: new Date(1234567891 * 1000).toISOString(),
-		status: "unsubscribed" as "unsubscribed" | "subscribed",
-		fid: mockFid,
-	},
 };
 
 const mockUser2 = {
@@ -58,13 +51,6 @@ const mockUser2 = {
 	pfpUrl: null,
 	bio: null,
 	primaryAddress: null,
-	proNft: {
-		order: 10002,
-		subscribed_at: new Date(1234567890 * 1000).toISOString(),
-		expires_at: new Date(1234567891 * 1000).toISOString(),
-		status: "unsubscribed" as "unsubscribed" | "subscribed",
-		fid: mockFid + 1,
-	},
 };
 
 // Create spies that we can configure per test
@@ -125,8 +111,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: "Test bio",
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			const mockPrimaryAddress = "0x1234567890abcdef" as `0x${string}`;
@@ -151,8 +136,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: "Test bio",
-				primaryAddress: mockPrimaryAddress,
-				proNft: null,
+				primaryAddress: mockPrimaryAddress
 			});
 		});
 
@@ -170,8 +154,7 @@ describe("Hydration Functions", () => {
 				displayName: null,
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			});
 		});
 
@@ -184,8 +167,7 @@ describe("Hydration Functions", () => {
 				displayName: null,
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
@@ -201,8 +183,7 @@ describe("Hydration Functions", () => {
 				displayName: null,
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			});
 		});
 
@@ -215,8 +196,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: "Test bio",
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
@@ -225,27 +205,6 @@ describe("Hydration Functions", () => {
 			const result = await getUserByFid(123);
 
 			expect(result.primaryAddress).toBeNull();
-		});
-
-		it("should always return proNft null after hard sunset", async () => {
-			const mockHubUser = {
-				fid: mockFid,
-				username: "testuser",
-				fname: "testuser",
-				attestations: [],
-				displayName: "Test User",
-				pfpUrl: null,
-				bio: "Test bio",
-				primaryAddress: null,
-				proNft: null,
-			};
-
-			hubUserSpy.mockResolvedValue(mockHubUser);
-			primaryAddressSpy.mockResolvedValue(null);
-
-			const result = await getUserByFid(123);
-
-			expect(result.proNft).toBeNull();
 		});
 
 		it("should serve repeat calls from cache without refetching", async () => {
@@ -257,8 +216,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
@@ -287,8 +245,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
@@ -326,8 +283,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			});
 			primaryAddressSpy.mockResolvedValue(undefined);
 
@@ -339,8 +295,7 @@ describe("Hydration Functions", () => {
 			expect(userCacheStore.has("user:123")).toBe(false);
 		});
 
-		it("should strip stale proNft from cache hits", async () => {
-			// simulate a user cached before the 2026-11-07 hard sunset
+		it("should strip legacy proNft from cache hits", async () => {
 			userCacheStore.set(
 				`user:${mockFid}`,
 				JSON.stringify({
@@ -363,10 +318,9 @@ describe("Hydration Functions", () => {
 
 			const result = await getUserByFid(mockFid);
 
-			// served from cache — no underlying fetches
 			expect(hubUserSpy).not.toHaveBeenCalled();
 			expect(primaryAddressSpy).not.toHaveBeenCalled();
-			expect(result.proNft).toBeNull();
+			expect(result).not.toHaveProperty("proNft");
 		});
 	});
 
@@ -451,8 +405,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null,
-				proNft: null,
+				primaryAddress: null
 			};
 
 			hubUserSpy.mockResolvedValue(mockUser);

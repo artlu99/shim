@@ -2,7 +2,7 @@
 --
 -- This repo has no migration tooling; the table DDL lives in the comment
 -- block at the top of src/lib/postgres.ts. Apply these against the Neon
--- database behind DATABASE_URL (the main one, NOT DATABASE_URL_PRO_NFT):
+-- database behind DATABASE_URL:
 --
 --   psql "$DATABASE_URL" -f sql/2026-10-10-casts-indexes.sql
 --

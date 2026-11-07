@@ -2,13 +2,12 @@ import { Elysia, t } from "elysia";
 import { getCastById } from "../lib/hub-grpc";
 import { getUserByFid } from "../lib/hydration";
 import { getCastByShortHash } from "../lib/postgres";
-import { withProNftDeprecation } from "../lib/pro-nft";
 import { getChannel, getChannelIdFromUrl } from "../lib/warpcast";
 import { CastSchema } from "../types";
 
 export const getCastByHash = new Elysia().get(
 	"/h/:castHash",
-	async ({ params: { castHash }, set }) => {
+	async ({ params: { castHash } }) => {
 		const castDbObj = await getCastByShortHash(castHash);
 		if (!castDbObj) {
 			return {
@@ -37,10 +36,10 @@ export const getCastByHash = new Elysia().get(
 			: undefined;
 		const channel = channelId ? await getChannel(channelId) : undefined;
 
-		return withProNftDeprecation(set, {
+		return {
 			success: true,
 			cast: { ...cast, user, channel },
-		});
+		};
 	},
 	{
 		params: t.Object({ castHash: t.String() }),

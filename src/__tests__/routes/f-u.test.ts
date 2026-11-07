@@ -1,10 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import { Elysia } from "elysia";
-import {
-	PRO_NFT_DEPRECATION_HEADER,
-	PRO_NFT_SUNSET_HEADER,
-	PRO_NFT_WARNING,
-} from "../../lib/pro-nft";
 import { fu } from "../../routes/f-u";
 
 describe("F-U Routes", () => {
@@ -100,12 +95,7 @@ describe("F-U Routes", () => {
 				expect(typeof data.user.displayName).toBe("string");
 				expect(typeof data.user.pfpUrl).toBe("string");
 				expect(typeof data.user.primaryAddress).toBe("string");
-				expect(data.user.proNft).toBeNull();
-				expect(data.warnings).toEqual([PRO_NFT_WARNING]);
-				expect(response.headers.get("Deprecation")).toBe(
-					PRO_NFT_DEPRECATION_HEADER,
-				);
-				expect(response.headers.get("Sunset")).toBe(PRO_NFT_SUNSET_HEADER);
+				expect(data.user).not.toHaveProperty("proNft");
 			}
 		});
 	});

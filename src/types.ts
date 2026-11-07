@@ -62,13 +62,6 @@ export interface User {
 	pfpUrl: string | null;
 	bio: string | null;
 	primaryAddress: `0x${string}` | null;
-	/** @deprecated 2026-11-07 — always null; remove after 2026-12-07 (see lib/pro-nft.ts) */
-	proNft: {
-		order: number;
-		subscribed_at: string;
-		expires_at: string;
-		status: "subscribed" | "unsubscribed";
-	} | null;
 }
 
 export interface Channel {
@@ -82,11 +75,4 @@ export interface HydratedCast extends Cast {
 	user: User;
 	channel?: Channel;
 	sentBy?: string | null;
-}
-
-export interface ProNftDetails {
-	fid: number;
-	order: number;
-	timestamp: number;
-	expires: number;
 }

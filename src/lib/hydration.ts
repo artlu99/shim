@@ -5,12 +5,11 @@ import redis, { Ttl } from "./redis";
 import { mapBatch } from "./util";
 import { getUserPrimaryAddress } from "./warpcast";
 
-// Hard sunset 2026-11-07: user.proNft is always null (see ./pro-nft.ts).
-// Strip any stale Redis value so cache hits cannot resurrect membership data.
-const withoutProNft = (user: User): User => ({
-	...user,
-	proNft: null,
-});
+// Drop legacy user.proNft from Redis hits written before the field was removed.
+const withoutLegacyProNft = (user: User & { proNft?: unknown }): User => {
+	const { proNft: _removed, ...rest } = user;
+	return rest;
+};
 
 // lmdis returns the raw string when JSON.parse fails, so verify the
 // minimal shape before trusting a cache hit
@@ -25,7 +24,7 @@ const inFlight = new Map<number, Promise<User>>();
 export const getUserByFid = async (fid: number): Promise<User> => {
 	const pending = inFlight.get(fid);
 	if (pending) {
-		return withoutProNft(await pending);
+		return withoutLegacyProNft(await pending);
 	}
 
 	const fetchUser = (async (): Promise<User> => {
@@ -58,8 +57,6 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 			pfpUrl: hubUser?.pfpUrl ?? null,
 			bio: hubUser?.bio ?? null,
 			primaryAddress: primaryAddress?.address ?? null,
-			// Pro NFT lookup retired; field kept null until remove-after date.
-			proNft: null,
 		};
 
 		// undefined hub user and undefined primary address are fetch failures
@@ -85,7 +82,7 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 	inFlight.set(fid, fetchUser);
 
 	try {
-		return withoutProNft(await fetchUser);
+		return withoutLegacyProNft(await fetchUser);
 	} finally {
 		inFlight.delete(fid);
 	}

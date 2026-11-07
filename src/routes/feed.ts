@@ -4,7 +4,6 @@ import { FEED_DEFAULT_PAGE_SIZE, HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import { getCastById, rawChannelFeed } from "../lib/hub-grpc";
 import { getSentFromBySignerKey, getUserByFid } from "../lib/hydration";
 import { getReverseChronFeed } from "../lib/postgres";
-import { withProNftDeprecation } from "../lib/pro-nft";
 import redis, { Ttl } from "../lib/redis";
 import { mapBatch } from "../lib/util";
 import {
@@ -50,7 +49,7 @@ async function fetchAndHydrateFeed(
 
 export const postReverseChronFeed = new Elysia().post(
 	"/reverse-chron",
-	async ({ body, set }) => {
+	async ({ body }) => {
 		const { fids, limit = 10, cursor } = body;
 		if (!fids || fids.length === 0) {
 			return {
@@ -97,11 +96,11 @@ export const postReverseChronFeed = new Elysia().post(
 			),
 		);
 
-		return withProNftDeprecation(set, {
+		return {
 			success: true,
 			casts: feed,
 			cursor: nextCursor,
-		});
+		};
 	},
 	{
 		body: t.Object({
@@ -132,10 +131,7 @@ export const postReverseChronFeed = new Elysia().post(
 
 export const getReverseChronChannelFeed = new Elysia().get(
 	"/channel/:channelId/reverse-chron",
-	async ({
-		params: { channelId, limit = FEED_DEFAULT_PAGE_SIZE },
-		set,
-	}) => {
+	async ({ params: { channelId, limit = FEED_DEFAULT_PAGE_SIZE } }) => {
 		if (!channelId) {
 			return {
 				success: false,
@@ -177,24 +173,24 @@ export const getReverseChronChannelFeed = new Elysia().get(
 				}
 			})();
 
-			return withProNftDeprecation(set, {
+			return {
 				success: true,
 				casts: feed,
 				cursor: undefined,
 				stale: true,
-			});
+			};
 		}
 
 		// If no cache, fetch fresh data
 		feed = await fetchAndHydrateFeed(channelId, channel.url, limit);
 		await cacheClient.set(cacheKey, JSON.stringify(feed), { ex: Ttl.FEED });
 
-		return withProNftDeprecation(set, {
+		return {
 			success: true,
 			casts: feed,
 			cursor: undefined,
 			stale: false,
-		});
+		};
 	},
 	{
 		params: t.Object({

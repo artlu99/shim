@@ -269,7 +269,6 @@ export const getHubUserByFid = async (
 			pfpUrl,
 			bio,
 			primaryAddress: null,
-			proNft: null,
 		};
 
 		return userBeforeOffHubHydration;
