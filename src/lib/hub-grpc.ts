@@ -2,6 +2,7 @@ import {
 	getInsecureHubRpcClient,
 	type HubEvent,
 	HubEventType,
+	type Message,
 	MessageType,
 } from "@farcaster/hub-nodejs";
 import { sift } from "radash";
@@ -11,6 +12,7 @@ import {
 	FARCASTER_EPOCH,
 	FEED_DEFAULT_PAGE_SIZE,
 	HUB_RPC_DEADLINE_MS,
+	MAX_SYNC_MESSAGES,
 	VERBOSE_LOGGING,
 } from "../constants";
 import { livenessFids } from "../static/artlu";
@@ -212,22 +214,38 @@ export const getCastsByFid = async (
 		const startTimestamp =
 			sinceTimestamp !== undefined ? sinceTimestamp - FARCASTER_EPOCH : undefined;
 
-		const castsRpcResponse = await withDeadline(
-			client.getAllCastMessagesByFid({
-				fid,
-				reverse: true,
-				pageSize: limit,
-				startTimestamp,
-			}),
-		);
+		// one page per RPC — keep walking nextPageToken until the hub runs out
+		// (or the sync cap hits). Stopping after one page silently capped every
+		// full sync at `limit` messages, and a small-limit caller could seed a
+		// fid's watermark with only its newest handful of casts — a gap
+		// watermark-incremental refreshes never backfill.
+		let unsafeMessages: Message[] = [];
+		let pageToken: Uint8Array | undefined;
+		do {
+			const castsRpcResponse = await withDeadline(
+				client.getAllCastMessagesByFid({
+					fid,
+					reverse: true,
+					pageSize: limit,
+					startTimestamp,
+					pageToken,
+				}),
+			);
 
-		if (!castsRpcResponse.isOk()) {
-			throw new Error(castsRpcResponse._unsafeUnwrapErr().toString());
-		}
+			if (!castsRpcResponse.isOk()) {
+				throw new Error(castsRpcResponse._unsafeUnwrapErr().toString());
+			}
 
-		const unsafeMessages = castsRpcResponse._unsafeUnwrap();
+			const page = castsRpcResponse._unsafeUnwrap();
+			unsafeMessages.push(...page.messages);
+			pageToken =
+				page.nextPageToken && page.nextPageToken.length > 0
+					? page.nextPageToken
+					: undefined;
+		} while (pageToken && unsafeMessages.length < MAX_SYNC_MESSAGES);
+
 		const res = sift(
-			unsafeMessages.messages.map((m) => {
+			unsafeMessages.map((m) => {
 				if (m.data?.castAddBody) {
 					return m as CastAddMessage;
 				}

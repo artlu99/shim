@@ -21,6 +21,10 @@ export const MAX_FOLLOWERS = 100;
 export const REFRESH_PARALLEL_BATCHES = 20;
 export const REFRESH_CASTS_SIZE = 500;
 
+// getCastsByFid keeps paging while the hub returns a nextPageToken; this
+// bounds a first sync of a very large account (or a refresh after a long gap)
+export const MAX_SYNC_MESSAGES = 10000;
+
 // hub rpc
 export const HUB_RPC_DEADLINE_MS = 10_000;
 
