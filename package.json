@@ -1,11 +1,8 @@
 {
 	"scripts": {
-		"backfill": "bun run src/scripts/backfill.ts",
 		"dev": "bun run --watch src/index.tsx",
 		"start": "NODE_ENV=production bun src/index.tsx",
 		"test:coverage": "bun test --coverage --coverage-reporter=text",
-		"profile:indexes": "bun run src/scripts/profile-indexes.ts",
-		"backfill:sqlite": "bun run src/scripts/backfill-sqlite.ts",
 		"user:flush": "bun run src/scripts/flush-users.ts"
 	},
 	"dependencies": {
@@ -20,15 +17,12 @@
 		"elysia": "^1.4.30",
 		"itty-fetcher": "1.0.10",
 		"kysely": "^0.29.6",
-		"kysely-neon": "1.3.0",
-		"pg": "^8.23.1",
 		"radash": "^12.1.1",
 		"tiny-invariant": "^1.3.3"
 	},
 	"devDependencies": {
 		"@farcaster/core": "^0.20.0",
-		"@types/bun": "^1.4.3",
-		"@types/pg": "^8.23.1"
+		"@types/bun": "^1.4.3"
 	},
 	"trustedDependencies": [
 		"protobufjs"

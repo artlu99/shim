@@ -152,9 +152,8 @@ describe("sqlite store", () => {
 	});
 
 	describe("getStats", () => {
-		it("counts all rows including deleted ones (Postgres parity)", async () => {
-			// postgres.ts's getStats has no deleted_at filter; 100 rows total,
-			// one with deleted_at set
+		it("counts all rows including deleted ones", async () => {
+			// getStats has no deleted_at filter; 100 rows total, one deleted
 			const { total, topFids } = await getStats(3);
 			expect(Number(total?.count)).toBe(100);
 			expect(Number(total?.numFids)).toBe(3);

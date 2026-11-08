@@ -18,22 +18,17 @@ import type { Cast } from "../types";
 import { pluralize } from "./util";
 
 /*
-	SQLite (bun:sqlite) store for the VPS branch — replaces Neon for the local
-	casts/follows tables. Kept behind the same function signatures as
-	postgres.ts so routes don't care which engine is live.
+	SQLite (bun:sqlite) store for casts and follows.
 
-	- DDL below is applied automatically on first open (postgres.ts's copy is
-	  still applied by hand against Neon; this branch's canonical store is the
-	  file). Partial indexes behave identically.
+	- DDL below is applied automatically on first open.
 	- WAL + synchronous=NORMAL: consistent across app crashes, may lose the
 	  last few commits on OS/power crash — acceptable for a cache of hub data.
-	- PRAGMA case_sensitive_like=ON keeps Postgres LIKE semantics for the
-	  hash-prefix lookups (SQLite defaults to case-insensitive ASCII), and is
-	  the combination that lets the hash PK serve LIKE 'prefix%' range scans.
-	- Cursor format (v1:salted-base64) is unchanged, so cursors issued while
-	  the Neon store was live keep working.
-	- To seed the file from Neon: bun run backfill:sqlite
-	  (src/scripts/backfill-sqlite.ts, reads DATABASE_URL).
+	- PRAGMA case_sensitive_like=ON keeps prefix lookups case-sensitive
+	  (SQLite defaults to case-insensitive ASCII), which lets the hash PK
+	  serve LIKE 'prefix%' range scans.
+	- Cursor format is v1:salted-base64.
+	- A new file starts empty. Copy a VACUUM INTO snapshot from a potato that
+	  already has history, or let /refresh fill from the hub.
 */
 
 const DDL = `
