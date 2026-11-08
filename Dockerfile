@@ -1,7 +1,6 @@
 FROM oven/bun:1-slim
 WORKDIR /app
 
-# bun.lock is committed on the sh branch via `git add -f` (upstream .gitignore ignores it)
 COPY package.json bun.lock ./
 RUN bun install --production --frozen-lockfile
 
@@ -18,6 +17,10 @@ RUN mkdir -p /app/data && chown bun:bun /app/data
 ENV NODE_ENV=production
 ENV TZ=UTC
 ENV PORT=3000
+
+# .git is not in the image. Compose passes the sha at build time.
+ARG SHIM_GIT_SHA=unknown
+ENV SHIM_GIT_SHA=${SHIM_GIT_SHA}
 
 USER bun
 EXPOSE 3000

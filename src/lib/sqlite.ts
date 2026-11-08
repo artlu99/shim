@@ -272,6 +272,45 @@ export const getStats = async (topN = 5) => {
 	return { total: totalStats, topFids };
 };
 
+const countOf = (value: unknown): number => {
+	const n = Number(value ?? 0);
+	return Number.isFinite(n) ? n : 0;
+};
+
+export const sqliteFilePath = (): string =>
+	process.env.SQLITE_PATH ?? DEFAULT_SQLITE_PATH;
+
+// Cheap local counts for /info. No username lookups, no top-N scan.
+export const getInfoCounts = async () => {
+	const [casts, liveCasts, follows, fids] = await Promise.all([
+		db()
+			.selectFrom("casts")
+			.select((eb) => eb.fn.countAll().as("n"))
+			.executeTakeFirst(),
+		db()
+			.selectFrom("casts")
+			.select((eb) => eb.fn.countAll().as("n"))
+			.where("deleted_at", "is", null)
+			.executeTakeFirst(),
+		db()
+			.selectFrom("follows")
+			.select((eb) => eb.fn.countAll().as("n"))
+			.executeTakeFirst(),
+		db()
+			.selectFrom("casts")
+			.select((eb) => eb.fn.count("fid").distinct().as("n"))
+			.where("deleted_at", "is", null)
+			.executeTakeFirst(),
+	]);
+
+	return {
+		casts: countOf(casts?.n),
+		liveCasts: countOf(liveCasts?.n),
+		follows: countOf(follows?.n),
+		fids: countOf(fids?.n),
+	};
+};
+
 export const getLatestCastTimestamps = async (
 	fids: number[],
 ): Promise<Map<number, number>> => {

@@ -11,6 +11,7 @@ import { getCastByHash } from "./routes/castByHash";
 import { getCastByWarpcastUri } from "./routes/castByWarpcastUri";
 import { docs } from "./routes/docs";
 import { fu } from "./routes/f-u";
+import { info } from "./routes/info";
 import {
 	getReverseChronChannelFeed,
 	postReverseChronFeed,
@@ -29,6 +30,7 @@ const app = new Elysia()
 	.onStart(() => console.log(`🦊 Elysia is running on port ${port}`))
 	.use(cors())
 	.use(docs)
+	.use(info)
 	.use(stats)
 	.use(fu)
 	.use(socialContract)

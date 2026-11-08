@@ -16,7 +16,7 @@ import {
 import type { Cast } from "../../types";
 
 // offline suite: exercises every sqlite.ts export against a temp file DB so
-// nothing here touches Neon, the hub, or lmdis
+// nothing here touches the hub or lmdis
 const dbPath = join(mkdtempSync(join(tmpdir(), "shim-sqlite-test-")), "test.sqlite");
 
 // the singleton reads SQLITE_PATH on first use, so set it before any query

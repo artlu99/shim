@@ -1,19 +1,20 @@
 import { swagger } from "@elysiajs/swagger";
 import { Elysia } from "elysia";
+import { SHIM_VERSION } from "../version";
 
 // Scalar does NOT fall back to the serving origin when the spec omits
 // `servers` (unlike Swagger UI): it renders host-less curl snippets like
 // `curl /stats`, which request a nothing host. The swagger plugin spreads
 // `documentation` into the spec on every /docs/json request, so an onRequest
 // hook can point this shared object at whichever origin renders the docs
-// (dev / Render / potato). x-forwarded-proto wins over request.url because
+// (dev or a potato). x-forwarded-proto wins over request.url because
 // TLS terminates upstream in production.
 const documentation: NonNullable<
 	NonNullable<Parameters<typeof swagger>[0]>["documentation"]
 > = {
 	info: {
 		title: "Shim API",
-		version: "0.0.1",
+		version: SHIM_VERSION,
 		description:
 			"Shim API for the Farcaster Snapchain (née Hubble Protocol)",
 		contact: {

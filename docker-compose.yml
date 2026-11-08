@@ -2,7 +2,10 @@ name: shim
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        SHIM_GIT_SHA: ${SHIM_GIT_SHA:-unknown}
     restart: unless-stopped
     env_file: .env
     environment:

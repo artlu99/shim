@@ -32,10 +32,11 @@ describe("docs", () => {
 			new Request("https://shim.artlu.xyz/docs/json"),
 		);
 		const spec = (await res.json()) as {
-			info: { title: string };
+			info: { title: string; version: string };
 			tags: Array<{ name: string }>;
 		};
 		expect(spec.info.title).toBe("Shim API");
+		expect(spec.info.version).toBe("1.0.0");
 		expect(spec.tags.map((t) => t.name)).toContain("F 👉👈 U");
 	});
 
