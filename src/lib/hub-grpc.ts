@@ -2,7 +2,6 @@ import {
 	getInsecureHubRpcClient,
 	type HubEvent,
 	HubEventType,
-	type Message,
 	MessageType,
 } from "@farcaster/hub-nodejs";
 import { sift } from "radash";
@@ -196,53 +195,97 @@ export const getCastById = async (
 	}
 };
 
+// Walk hub pages until `maxMessages` or the hub runs dry. pageSize is the
+// RPC page, not the caller's cap. An empty page ends the walk even when a
+// token is attached — a non-advancing token would otherwise spin to the cap.
+export const collectPagedMessages = async <T>(
+	fetchPage: (request: {
+		pageToken?: Uint8Array;
+		pageSize: number;
+	}) => Promise<{ messages: T[]; nextPageToken?: Uint8Array }>,
+	maxMessages: number,
+	pageSize: number,
+): Promise<T[]> => {
+	if (maxMessages <= 0 || pageSize <= 0) {
+		return [];
+	}
+
+	const collected: T[] = [];
+	let pageToken: Uint8Array | undefined;
+
+	while (collected.length < maxMessages) {
+		const requestSize = Math.min(pageSize, maxMessages - collected.length);
+		const page = await fetchPage({ pageToken, pageSize: requestSize });
+		if (page.messages.length === 0) {
+			break;
+		}
+
+		collected.push(...page.messages.slice(0, maxMessages - collected.length));
+		if (collected.length >= maxMessages) {
+			break;
+		}
+
+		pageToken =
+			page.nextPageToken && page.nextPageToken.length > 0
+				? page.nextPageToken
+				: undefined;
+		if (!pageToken) {
+			break;
+		}
+	}
+
+	return collected;
+};
+
 export const getCastsByFid = async (
 	fid: number,
-	limit = CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE,
+	maxMessages = CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE,
 	sinceTimestamp?: number,
+	options?: { upsert?: boolean },
 ) => {
 	if (!client) {
 		return { casts: [], numNew: 0 };
 	}
 	try {
-		let casts: Cast[] = [];
-
 		// incremental: the hub filters server-side via startTimestamp (hub-time
 		// seconds since the Farcaster epoch), so steady-state refreshes only
 		// pull and hydrate genuinely new casts. The filter is inclusive of the
 		// watermark second — overlap is fine because upsert dedupes by hash.
+		//
+		// maxMessages is a result cap. The RPC page size stays fixed, so a
+		// request for 10 casts is one small page — not a 10k sync in pages
+		// of 10. Upsert is off unless asked: only /refresh writes. A bounded
+		// read that stored its newest page would seal the watermark, and
+		// incremental refresh would never backfill behind it.
 		const startTimestamp =
 			sinceTimestamp !== undefined ? sinceTimestamp - FARCASTER_EPOCH : undefined;
+		const messageCap = Math.min(Math.max(0, maxMessages), MAX_SYNC_MESSAGES);
 
-		// one page per RPC — keep walking nextPageToken until the hub runs out
-		// (or the sync cap hits). Stopping after one page silently capped every
-		// full sync at `limit` messages, and a small-limit caller could seed a
-		// fid's watermark with only its newest handful of casts — a gap
-		// watermark-incremental refreshes never backfill.
-		let unsafeMessages: Message[] = [];
-		let pageToken: Uint8Array | undefined;
-		do {
-			const castsRpcResponse = await withDeadline(
-				client.getAllCastMessagesByFid({
-					fid,
-					reverse: true,
-					pageSize: limit,
-					startTimestamp,
-					pageToken,
-				}),
-			);
+		const unsafeMessages = await collectPagedMessages(
+			async ({ pageToken, pageSize }) => {
+				const castsRpcResponse = await withDeadline(
+					client.getAllCastMessagesByFid({
+						fid,
+						reverse: true,
+						pageSize,
+						startTimestamp,
+						pageToken,
+					}),
+				);
 
-			if (!castsRpcResponse.isOk()) {
-				throw new Error(castsRpcResponse._unsafeUnwrapErr().toString());
-			}
+				if (!castsRpcResponse.isOk()) {
+					throw new Error(castsRpcResponse._unsafeUnwrapErr().toString());
+				}
 
-			const page = castsRpcResponse._unsafeUnwrap();
-			unsafeMessages.push(...page.messages);
-			pageToken =
-				page.nextPageToken && page.nextPageToken.length > 0
-					? page.nextPageToken
-					: undefined;
-		} while (pageToken && unsafeMessages.length < MAX_SYNC_MESSAGES);
+				const page = castsRpcResponse._unsafeUnwrap();
+				return {
+					messages: page.messages,
+					nextPageToken: page.nextPageToken,
+				};
+			},
+			messageCap,
+			CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE,
+		);
 
 		const res = sift(
 			unsafeMessages.map((m) => {
@@ -253,18 +296,20 @@ export const getCastsByFid = async (
 			}),
 		);
 
-		casts = sift(await Promise.all(res.map(getCastFromAddMessage)));
+		const casts = sift(await Promise.all(res.map(getCastFromAddMessage)));
 		console.log(`got ${casts.length} casts from rpc for fid ${fid}`);
 
 		let numNew = 0;
-		try {
-			numNew = await upsertCasts(casts);
-		} catch (error) {
-			console.error(
-				"Error upserting casts:",
-				error instanceof Error ? error.message : JSON.stringify(error),
-			);
-			throw error;
+		if (options?.upsert) {
+			try {
+				numNew = await upsertCasts(casts);
+			} catch (error) {
+				console.error(
+					"Error upserting casts:",
+					error instanceof Error ? error.message : JSON.stringify(error),
+				);
+				throw error;
+			}
 		}
 
 		return { casts, numNew };

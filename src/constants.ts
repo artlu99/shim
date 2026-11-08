@@ -19,10 +19,10 @@ export const REACTIONS_DEFAULT_PAGE_SIZE = 250;
 // refresh endpoint
 export const MAX_FOLLOWERS = 100;
 export const REFRESH_PARALLEL_BATCHES = 20;
-export const REFRESH_CASTS_SIZE = 500;
 
-// getCastsByFid keeps paging while the hub returns a nextPageToken; this
-// bounds a first sync of a very large account (or a refresh after a long gap)
+// getCastsByFid walks pages of CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE until the
+// caller's cap or the hub runs dry. /refresh passes this so a cold fid is not
+// sealed after a single page. Every caller is clamped to it.
 export const MAX_SYNC_MESSAGES = 10000;
 
 // hub rpc

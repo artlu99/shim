@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, spyOn, type Mock } from "bun:test";
+import { MAX_SYNC_MESSAGES } from "../../constants";
 
 // Stubs must be in place before the dynamic imports in beforeAll run:
 // hub-grpc throws at import time without HUB_GRPC_ENDPOINT, and env DEV=FALSE
@@ -37,7 +38,12 @@ describe("processFids", () => {
 		const stats = await processFids([528]);
 
 		expect(stats.stats.totalFids).toBe(1);
-		expect(getCastsByFidSpy).toHaveBeenCalledWith(528, 500, 1759000000);
+		expect(getCastsByFidSpy).toHaveBeenCalledWith(
+			528,
+			MAX_SYNC_MESSAGES,
+			1759000000,
+			{ upsert: true },
+		);
 	});
 
 	it("passes no watermark for unknown fids", async () => {
@@ -46,7 +52,12 @@ describe("processFids", () => {
 
 		await processFids([617]);
 
-		expect(getCastsByFidSpy).toHaveBeenCalledWith(617, 500, undefined);
+		expect(getCastsByFidSpy).toHaveBeenCalledWith(
+			617,
+			MAX_SYNC_MESSAGES,
+			undefined,
+			{ upsert: true },
+		);
 	});
 
 	it("handles mixed known and unknown fids", async () => {
@@ -60,7 +71,17 @@ describe("processFids", () => {
 
 		expect(stats.success).toBe(true);
 		expect(stats.stats.totalFids).toBe(2);
-		expect(getCastsByFidSpy).toHaveBeenCalledWith(2210, 500, 1759123456);
-		expect(getCastsByFidSpy).toHaveBeenCalledWith(4407, 500, undefined);
+		expect(getCastsByFidSpy).toHaveBeenCalledWith(
+			2210,
+			MAX_SYNC_MESSAGES,
+			1759123456,
+			{ upsert: true },
+		);
+		expect(getCastsByFidSpy).toHaveBeenCalledWith(
+			4407,
+			MAX_SYNC_MESSAGES,
+			undefined,
+			{ upsert: true },
+		);
 	});
 });

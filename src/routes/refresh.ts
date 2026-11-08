@@ -2,7 +2,7 @@ import { Elysia, t } from "elysia";
 import { cluster } from "radash";
 import {
 	MAX_FOLLOWERS,
-	REFRESH_CASTS_SIZE,
+	MAX_SYNC_MESSAGES,
 	REFRESH_PARALLEL_BATCHES,
 } from "../constants";
 import { getFollowingByFid, getHubFidByUsername } from "../lib/hub-api";
@@ -11,8 +11,10 @@ import { getLatestCastTimestamps } from "../lib/postgres";
 
 export const processFids = async (allFids: number[]) => {
 	// incremental: users we already have casts for only pull new messages
-	// from the hub (server-side startTimestamp filter); unknown users do a
-	// full sync
+	// from the hub (server-side startTimestamp filter); unknown users sync
+	// up to MAX_SYNC_MESSAGES. This is the only writer — a bounded read that
+	// upserts the newest casts seals the watermark, and this path never
+	// walks back behind it.
 	const watermarks = await getLatestCastTimestamps(allFids);
 
 	// Process FIDs in parallel batches of REFRESH_PARALLEL_BATCHES (20)
@@ -20,7 +22,9 @@ export const processFids = async (allFids: number[]) => {
 	for (const batch of cluster(allFids, REFRESH_PARALLEL_BATCHES)) {
 		const batchResults = await Promise.all(
 			batch.map(async (fid: number) =>
-				getCastsByFid(fid, REFRESH_CASTS_SIZE, watermarks.get(fid)),
+				getCastsByFid(fid, MAX_SYNC_MESSAGES, watermarks.get(fid), {
+					upsert: true,
+				}),
 			),
 		);
 		results.push(...batchResults);
