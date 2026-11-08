@@ -91,8 +91,16 @@ const decodeCursor = (cursor: string): string | undefined => {
 };
 
 export const upsertCasts = async (castsToUpsert: Cast[]) => {
+	// Commit older casts first. Chunks are separate writes; if a later chunk
+	// throws, the watermark stays at the newest row that landed and the next
+	// refresh backfills the rest. Newest-first would seal the top of the
+	// batch and leave a gap behind it.
+	const oldestFirst = [...castsToUpsert].sort(
+		(a, b) => a.timestamp - b.timestamp,
+	);
+
 	let modified = 0;
-	for (const batch of cluster(castsToUpsert, UPSERT_CHUNK_SIZE)) {
+	for (const batch of cluster(oldestFirst, UPSERT_CHUNK_SIZE)) {
 		const result = await db()
 			.insertInto("casts")
 			.values(

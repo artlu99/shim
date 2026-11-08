@@ -19,7 +19,11 @@ export const REACTIONS_DEFAULT_PAGE_SIZE = 250;
 // refresh endpoint
 export const MAX_FOLLOWERS = 100;
 export const REFRESH_PARALLEL_BATCHES = 20;
-export const REFRESH_CASTS_SIZE = 500;
+
+// getCastsByFid walks pages of CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE until the
+// caller's cap or the hub runs dry. /refresh passes this so a cold fid is not
+// sealed after a single page. Every caller is clamped to it.
+export const MAX_SYNC_MESSAGES = 10000;
 
 // hub rpc
 export const HUB_RPC_DEADLINE_MS = 10_000;
