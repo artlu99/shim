@@ -4,6 +4,14 @@ The Shim API is a thin Farcaster read layer. It runs on [Bun](https://bun.sh/) a
 
 The last Render/Neon tree is the `cloud-final` tag.
 
+On a Debian VPS, as the deploy user (not root), with git, Docker Engine, and the Compose plugin already installed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/artlu99/shim/main/install.sh | bash
+```
+
+Pipe to `bash`, not `sh`. To bind a port other than 7300: `curl -fsSL https://raw.githubusercontent.com/artlu99/shim/main/install.sh | SHIM_PORT=7301 bash`. Then start Compose as in [Install](#install).
+
 ## Development
 
 ```bash
@@ -17,15 +25,7 @@ Open <http://localhost:3000>. The local store is `data/shim.sqlite`. A local `.e
 
 `install.sh` runs as the deploy user. It does not use sudo, install packages, or create swap. Git, Docker Engine, and the Compose plugin must already be installed. The script checks those, and it checks that the current login is in the `docker` group without changing groups. It clones this repo to `$HOME/shim` and lmdis beside it. The app binds `127.0.0.1:7300`. When `$HOME/shim/.env` is missing it writes one: 32 bytes from `/dev/urandom` go in both `LMDIS_REST_TOKEN` and `UPSTASH_REDIS_REST_TOKEN`, mode `600`, and the value is not printed. A re-run leaves an existing `.env` in place. It does not start Compose or install cloudflared.
 
-```bash
-bash install.sh
-```
-
-If 7300 is already taken, set `SHIM_PORT` before the first run. Compose reads that value from `.env`. If `.env` already exists, edit `SHIM_PORT` there instead. The container still listens on 3000.
-
-```bash
-SHIM_PORT=7301 bash install.sh
-```
+From a checkout: `bash install.sh`. If 7300 is already taken, set `SHIM_PORT` before the first run (`SHIM_PORT=7301 bash install.sh`, or on the `bash` side of the curl pipe). Compose reads that value from `.env`. If `.env` already exists, edit `SHIM_PORT` there instead. The container still listens on 3000.
 
 Then:
 
