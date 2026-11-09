@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { Elysia } from "elysia";
 import { fu } from "../../routes/f-u";
 
-describe("F-U Routes", () => {
+// Live hub and Warpcast answers. A cache does not make these meaningful.
+const describeLive = process.env.LIVE === "1" ? describe : describe.skip;
+
+describeLive("F-U Routes", () => {
 	const app = new Elysia().use(fu);
 
 	describe("GET /u/:fid", () => {

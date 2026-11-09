@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { Elysia } from "elysia";
 import { socialContract } from "../../routes/social-contract";
 
-describe("Social Contract Routes", () => {
+// Live hub and Base RPC answers. A cache does not make these meaningful.
+const describeLive = process.env.LIVE === "1" ? describe : describe.skip;
+
+describeLive("Social Contract Routes", () => {
 	const app = new Elysia().use(socialContract);
 
 	describe("GET /signed/:fid", () => {

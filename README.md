@@ -13,18 +13,18 @@ bun dev
 
 Open <http://localhost:3000>. The local store is `data/shim.sqlite`. A local `.env` needs `HUB_GRPC_ENDPOINT`, `UPSTASH_REDIS_REST_URL`, and `UPSTASH_REDIS_REST_TOKEN`. On a box, `install.sh` writes those.
 
-## Install on Debian
+## Install
 
-`install.sh` is idempotent and Debian-only. As root it adds a 2G swapfile, installs Docker Engine and the Compose plugin from Docker's Debian apt repo, puts the invoking user in the `docker` group, and clones this repo and lmdis under `/opt`. When `/opt/shim/.env` is missing it writes one: a 32-byte token from `openssl rand -hex 32` goes in both `LMDIS_REST_TOKEN` and `UPSTASH_REDIS_REST_TOKEN`, mode `600`, and the value is not printed. A re-run leaves an existing `.env` in place. It does not start Compose or install cloudflared.
+`install.sh` runs as the deploy user. It does not use sudo, install packages, or create swap. Git, Docker Engine, and the Compose plugin must already be installed. The script checks those, and it checks that the current login is in the `docker` group without changing groups. It clones this repo to `$HOME/shim` and lmdis beside it. The app binds `127.0.0.1:7300`. When `$HOME/shim/.env` is missing it writes one: 32 bytes from `/dev/urandom` go in both `LMDIS_REST_TOKEN` and `UPSTASH_REDIS_REST_TOKEN`, mode `600`, and the value is not printed. A re-run leaves an existing `.env` in place. It does not start Compose or install cloudflared.
 
 ```bash
-sudo bash install.sh
+bash install.sh
 ```
 
-Log out and back in if the script added you to the `docker` group. Then:
+Then:
 
 ```bash
-cd /opt/shim
+cd ~/shim
 SHIM_GIT_SHA=$(git rev-parse --short HEAD) docker compose up -d --build
 curl -s localhost:7300/health
 curl -s localhost:7300/info
@@ -32,7 +32,7 @@ curl -s localhost:7300/info
 
 ## Ingress
 
-Point an existing remotely-managed cloudflared public hostname at `http://localhost:7300`. Optional: Cloudflare Access on the path `refresh`, which is the only mutating route. The in-process refresh cron never leaves the box, so Access does not affect it. `localhost:7300` is not behind Access.
+Point an existing remotely-managed cloudflared public hostname at `http://127.0.0.1:7300`. Optional: Cloudflare Access on the path `refresh`, which is the only mutating route. The in-process refresh cron never leaves the box, so Access does not affect it. The host port is bound to loopback, so it is not behind Access.
 
 ## Seed and backup
 

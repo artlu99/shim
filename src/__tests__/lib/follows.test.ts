@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { getFollowingByFid } from "../../lib/hub-api";
 
-describe("follows", () => {
+// Live hub follow counts. A cache does not make these meaningful.
+const describeLive = process.env.LIVE === "1" ? describe : describe.skip;
+
+describeLive("follows", () => {
 	it("should get follows by fid", async () => {
 		const testCases = [
 			{ fid: 2, expectedFollows: 1854 },
