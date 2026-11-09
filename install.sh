@@ -143,7 +143,6 @@ if [ -f "$shim_dir/.env" ]; then
 fi
 
 echo "Next:"
-echo "  cd $shim_dir"
-echo "  SHIM_GIT_SHA=\$(git rev-parse --short HEAD) docker compose up -d --build"
+echo "  bash $shim_dir/upgrade.sh"
 echo "  curl -s localhost:${listen_port}/health"
 echo "  curl -s localhost:${listen_port}/info"

@@ -10,7 +10,7 @@ On a Debian VPS, as the deploy user (not root), with git, Docker Engine, and the
 curl -fsSL https://raw.githubusercontent.com/artlu99/shim/main/install.sh | bash
 ```
 
-Pipe to `bash`, not `sh`. To bind a port other than 7300: `curl -fsSL https://raw.githubusercontent.com/artlu99/shim/main/install.sh | SHIM_PORT=7301 bash`. Then start Compose as in [Install](#install).
+Pipe to `bash`, not `sh`. To bind a port other than 7300: `curl -fsSL https://raw.githubusercontent.com/artlu99/shim/main/install.sh | SHIM_PORT=7301 bash`. Then run `upgrade.sh` as in [Install](#install).
 
 ## Development
 
@@ -32,13 +32,12 @@ Compose also names containers and volumes from the project name. The default is 
 Then:
 
 ```bash
-cd ~/shim
-SHIM_GIT_SHA=$(git rev-parse --short HEAD) docker compose up -d --build
+bash ~/shim/upgrade.sh
 curl -s localhost:7300/health
 curl -s localhost:7300/info
 ```
 
-Use the port from `.env` in that curl when it is not 7300.
+Use the port from `.env` in that curl when it is not 7300. `upgrade.sh` fast-forwards this checkout to `origin/main` when the tree is clean, then rebuilds. A dirty tree exits and leaves the stack alone. It does not pull `~/lmdis`. When the running app's `SHIM_GIT_SHA` already equals `git rev-parse --short HEAD`, it skips the image build and runs `docker compose up -d`, which applies a changed `.env` or compose file and leaves the containers alone when nothing drifted. Otherwise it bakes that SHA in and runs `docker compose up -d --build`. `docker compose down` is not part of an upgrade. Volumes stay.
 
 ## Ingress
 
