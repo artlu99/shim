@@ -1,4 +1,6 @@
-name: shim
+# Default keeps an existing single-user volume named shim. A second account
+# sets COMPOSE_PROJECT_NAME in its own .env (install.sh writes shim-<user>).
+name: ${COMPOSE_PROJECT_NAME:-shim}
 
 services:
   app:

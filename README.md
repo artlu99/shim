@@ -27,6 +27,8 @@ Open <http://localhost:3000>. The local store is `data/shim.sqlite`. A local `.e
 
 From a checkout: `bash install.sh`. If 7300 is already taken, set `SHIM_PORT` before the first run (`SHIM_PORT=7301 bash install.sh`, or on the `bash` side of the curl pipe). Compose reads that value from `.env`. If `.env` already exists, edit `SHIM_PORT` there instead. The container still listens on 3000.
 
+Compose also names containers and volumes from the project name. The default is `shim`, which is what an existing checkout keeps when `.env` has no `COMPOSE_PROJECT_NAME`. A new `.env` gets `shim-<user>`, so a second account on the same machine does not replace the first account's containers. Do not edit `name:` in `docker-compose.yml`. A later `git pull` would overwrite it. Set `COMPOSE_PROJECT_NAME` in that checkout's `.env` instead.
+
 Then:
 
 ```bash

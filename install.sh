@@ -35,6 +35,24 @@ if [[ ! "$SHIM_PORT" =~ ^[0-9]+$ ]] || [ "$SHIM_PORT" -lt 1 ] || [ "$SHIM_PORT" 
 	exit 1
 fi
 
+# Two accounts each cloning $HOME/shim still share the directory name "shim".
+# Compose uses that as the project name, so the second `up` replaces the
+# first user's containers. A new .env gets shim-<user>. An existing .env
+# without this variable stays on the default project name, shim.
+if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
+	project_user=$(id -un | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-')
+	project_user=${project_user#-}
+	project_user=${project_user%-}
+	if [ -z "$project_user" ]; then
+		project_user=$(id -u)
+	fi
+	COMPOSE_PROJECT_NAME="shim-${project_user}"
+fi
+if [[ ! "$COMPOSE_PROJECT_NAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+	echo "COMPOSE_PROJECT_NAME must be a lowercase Compose project name (letters, numbers, _ and -)" >&2
+	exit 1
+fi
+
 # SecurityOptions from `docker info` includes name=rootless when the daemon
 # this user is talking to is rootless. The docker group is root-equivalent.
 # A rootful daemon warns and the install continues. Moving to rootless can
@@ -96,6 +114,7 @@ if [ ! -f "$shim_dir/.env" ]; then
 		cat > "$shim_dir/.env" <<EOF
 # written by install.sh. do not commit.
 SHIM_PORT=${SHIM_PORT}
+COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
 UPSTASH_REDIS_REST_URL=http://lmdis:3000
 UPSTASH_REDIS_REST_TOKEN=${token}
 LMDIS_REST_TOKEN=${token}
@@ -112,7 +131,7 @@ EOF
 	echo "wrote $shim_dir/.env with a new lmdis token (not printed)"
 else
 	echo "$shim_dir/.env already exists, leaving it"
-	echo "edit SHIM_PORT in that file to change the host port"
+	echo "edit SHIM_PORT or COMPOSE_PROJECT_NAME in that file if this stack must not share another user's containers"
 fi
 
 listen_port=7300
