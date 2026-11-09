@@ -1,0 +1,126 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import {
+	getHypersnapCastByHash,
+	hypersnapCastToCast,
+} from "../../lib/hypersnap";
+
+// trimmed from a live haatz.quilibrium.com answer
+const FIXTURE = {
+	object: "cast",
+	hash: "A7C5F47033DA848D6D16DAC11C61838634A50C23",
+	parent_url: "chain://eip155:7777777/erc721:0x4f86113",
+	parent_author: { fid: null },
+	author: { object: "user", fid: 3854, username: "darrylyeo" },
+	text: "My thoughts on the merger",
+	timestamp: "2026-10-18T00:50:15.000Z",
+	embeds: [
+		{ cast_id: { fid: 37, hash: "83c734e1985ad2b6f28bea2938a750981740a093" } },
+		{ url: "https://example.com/picture.png" },
+	],
+	mentioned_profiles: [{ fid: 527487 }, { username: "no-fid" }],
+	reactions: { likes_count: 103 },
+};
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+	globalThis.fetch = originalFetch;
+});
+
+describe("hypersnapCastToCast", () => {
+	test("maps the client-API shape onto shim's Cast", () => {
+		const cast = hypersnapCastToCast(FIXTURE);
+		expect(cast).toBeDefined();
+		expect(cast!.fid).toBe(3854);
+		expect(cast!.hash).toBe(
+			"0xa7c5f47033da848d6d16dac11c61838634a50c23",
+		);
+		expect(cast!.timestamp).toBe(
+			Math.floor(Date.parse("2026-10-18T00:50:15.000Z") / 1000),
+		);
+		expect(cast!.text).toBe("My thoughts on the merger");
+		expect(cast!.rawText).toBeNull();
+		expect(cast!.parentUrl).toBe("chain://eip155:7777777/erc721:0x4f86113");
+		expect(cast!.parentCastId).toBeUndefined();
+		expect(cast!.embeds).toEqual([
+			{
+				url: undefined,
+				castId: {
+					fid: 37,
+					hash: "0x83c734e1985ad2b6f28bea2938a750981740a093",
+				},
+			},
+			{ url: "https://example.com/picture.png", castId: undefined },
+		]);
+		expect(cast!.mentions).toEqual([527487]);
+		expect(cast!.mentionsPositions).toEqual([]);
+	});
+
+	test("maps a reply's parent_hash onto parentCastId", () => {
+		const cast = hypersnapCastToCast({
+			...FIXTURE,
+			parent_url: null,
+			parent_hash: "83c734e1985ad2b6f28bea2938a750981740a093",
+			parent_author: { fid: 37 },
+		});
+		expect(cast!.parentCastId).toEqual({
+			fid: 37,
+			hash: "0x83c734e1985ad2b6f28bea2938a750981740a093",
+		});
+		expect(cast!.parentUrl).toBeUndefined();
+	});
+
+	test("rejects shapes without an author fid, hash, or timestamp", () => {
+		expect(hypersnapCastToCast({ ...FIXTURE, author: {} })).toBeUndefined();
+		expect(hypersnapCastToCast({ ...FIXTURE, hash: undefined })).toBeUndefined();
+		expect(
+			hypersnapCastToCast({ ...FIXTURE, timestamp: "not-a-date" }),
+		).toBeUndefined();
+		expect(hypersnapCastToCast(null)).toBeUndefined();
+	});
+});
+
+describe("getHypersnapCastByHash", () => {
+	const HASH = "0xa7c5f47033da848d6d16dac11c61838634a50c23";
+
+	// Bun's fetch type carries a preconnect member the stubs don't
+	// implement — the client only ever calls fetch(url, init).
+	const stubFetch = (impl: () => Promise<Response>) => {
+		globalThis.fetch = Object.assign(impl) as unknown as typeof fetch;
+	};
+
+	test("resolves the cast on a 200 answer", async () => {
+		stubFetch(async () =>
+			Response.json({ cast: FIXTURE }, { status: 200 }),
+		);
+		const cast = await getHypersnapCastByHash(HASH as `0x${string}`);
+		expect(cast?.fid).toBe(3854);
+	});
+
+	test("answers undefined on an authoritative 404 miss", async () => {
+		stubFetch(async () =>
+			Response.json({ error: "not found" }, { status: 404 }),
+		);
+		const cast = await getHypersnapCastByHash(HASH as `0x${string}`);
+		expect(cast).toBeUndefined();
+	});
+
+	test("throws on a transport failure — an outage, not a verdict", async () => {
+		stubFetch(async () => {
+			throw new Error("connect ECONNREFUSED");
+		});
+		expect(getHypersnapCastByHash(HASH as `0x${string}`)).rejects.toThrow();
+	});
+
+	test("throws when the answer names a different cast", async () => {
+		stubFetch(async () =>
+			Response.json(
+				{ cast: { ...FIXTURE, hash: "b".repeat(40) } },
+				{ status: 200 },
+			),
+		);
+		expect(getHypersnapCastByHash(HASH as `0x${string}`)).rejects.toThrow(
+			/different cast/,
+		);
+	});
+});

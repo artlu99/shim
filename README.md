@@ -21,7 +21,7 @@ bun install
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The local store is `data/shim.sqlite`. A local `.env` needs `HUB_GRPC_ENDPOINT`, `UPSTASH_REDIS_REST_URL`, and `UPSTASH_REDIS_REST_TOKEN` (can be lmdis). On a box, `install.sh` writes those.
+Open [http://localhost:3000](http://localhost:3000). The local store is `data/shim.sqlite`. A local `.env` needs `HUB_GRPC_ENDPOINT`, `UPSTASH_REDIS_REST_URL`, and `UPSTASH_REDIS_REST_TOKEN` (can be lmdis). On a box, `install.sh` writes those. `HYPERSNAP_API_ENDPOINT` is optional — it defaults to Quilibrium's public node and backs `/h`'s hash-only network resolution on a local-index miss.
 
 The last Render/Neon tree was the `cloud-final` tag.
 

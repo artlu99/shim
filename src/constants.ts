@@ -32,3 +32,12 @@ export const HUB_RPC_DEADLINE_MS = 10_000;
 // stats usernames) go through mapBatch in chunks of this size instead of
 // one unbounded Promise.all
 export const HTTP_FAN_OUT_BATCH_SIZE = 20;
+
+// Hypersnap (Quilibrium's Snapchain fork) serves a Warpcast-client-shaped
+// HTTP API on the node. Its /v2/farcaster/cast?type=hash endpoint is the
+// only open network source of hash-only cast resolution — canonical
+// Snapchain is keyed fid + hash everywhere, because the protocol's message
+// key is (fid, hash). /h falls back to it on a local-index miss.
+export const HYPERSNAP_API_ENDPOINT =
+	process.env.HYPERSNAP_API_ENDPOINT || "https://haatz.quilibrium.com";
+export const HYPERSNAP_TIMEOUT_MS = 10_000;
