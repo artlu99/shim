@@ -42,7 +42,7 @@ const app = new Elysia()
 	.use(
 		cron({
 			name: "refresh-fids",
-			pattern: "0 8 * * * *", // every day at 8 am UTC
+			pattern: "0 8 * * * *", // minute 8 every hour
 			run() {
 				processFids(livenessFids);
 			},

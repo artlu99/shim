@@ -1,2 +1,2 @@
-// 0xen + cameron + kenny + keccers + king + accountless
-export const livenessFids = [528, 617, 2210, 4407, 6596, 880];
+// 0xen + cameron + accountless + cassie + borodutch + kenny + kmac + justin
+export const livenessFids = [528, 617, 880, 1325, 1356, 2210, 4163, 8004];
