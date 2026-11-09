@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Idempotent Debian host prep for shim. Run as root:
 #   sudo bash install.sh
-# Does not write real secrets, start Compose, or install cloudflared.
+# When /opt/shim/.env is missing, writes one with a random lmdis token.
+# Does not print that token, start Compose, or install cloudflared.
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -40,7 +41,7 @@ fi
 
 # 2. git, then Docker Engine + Compose plugin when `docker compose` is absent.
 apt-get update
-apt-get install -y ca-certificates curl git
+apt-get install -y ca-certificates curl git openssl
 if ! docker compose version >/dev/null 2>&1; then
 	install -m 0755 -d /etc/apt/keyrings
 	curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
@@ -89,23 +90,44 @@ else
 	git -C /opt/shim pull --ff-only origin main
 fi
 
-# 5. Own the trees, then stage .env. A root-owned checkout breaks later pulls.
+# 5. Own the trees, then write .env. A root-owned checkout breaks later pulls.
+#    An existing .env is left alone so a re-run does not rotate the token.
 if [ "$INVOKER" != "root" ]; then
 	chown -R "$INVOKER":"$INVOKER" /opt/shim /opt/lmdis
 fi
 if [ ! -f /opt/shim/.env ]; then
-	cp /opt/shim/.env.example /opt/shim/.env
+	(
+		umask 077
+		token=$(openssl rand -hex 32)
+		if [[ ! "$token" =~ ^[0-9a-f]{64}$ ]]; then
+			echo "failed to generate lmdis token" >&2
+			exit 1
+		fi
+		# SQLITE_PATH is set by compose. Do not set DEV (DEV=FALSE disables gRPC).
+		cat > /opt/shim/.env <<EOF
+# written by install.sh. do not commit.
+UPSTASH_REDIS_REST_URL=http://lmdis:3000
+UPSTASH_REDIS_REST_TOKEN=${token}
+LMDIS_REST_TOKEN=${token}
+
+# optional bare JSON-RPC root; default is the Base RPC racer
+# https://evm.stupidtech.net/v1/8453
+# BASE_RPC_URL=
+
+# bare host:port, no scheme. replace when this hub rotates.
+HUB_GRPC_ENDPOINT=107.20.169.236:3383
+EOF
+	)
 	chmod 600 /opt/shim/.env
 	if [ "$INVOKER" != "root" ]; then
 		chown "$INVOKER":"$INVOKER" /opt/shim/.env
 	fi
-	echo "staged /opt/shim/.env from .env.example — fill CHANGE_ME before compose up"
+	echo "wrote /opt/shim/.env with a new lmdis token (not printed)"
 else
 	echo "/opt/shim/.env already exists, leaving it"
 fi
 
 echo "Next, as ${INVOKER}:"
-echo "  edit /opt/shim/.env (LMDIS_REST_TOKEN and UPSTASH_REDIS_REST_TOKEN must match)"
 echo "  cd /opt/shim"
 echo "  SHIM_GIT_SHA=\$(git rev-parse --short HEAD) docker compose up -d --build"
 echo "  curl -s localhost:7300/health"

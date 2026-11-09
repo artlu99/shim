@@ -17,8 +17,12 @@ const SOCIAL_CONTRACT_NFT =
 // address; the bump invalidates cached negatives produced by the old logic
 const CACHE_KEY_PREFIX = "social-contract:v2";
 
+// Base (chain 8453) through the public RPC racer. The client posts to this
+// URL with an empty path, so it must be a bare JSON-RPC root.
+const DEFAULT_BASE_RPC = "https://evm.stupidtech.net/v1/8453";
+
 const baseRpc = fetcher({
-	base: process.env.BASE_RPC_URL || "https://mainnet.base.org",
+	base: process.env.BASE_RPC_URL || DEFAULT_BASE_RPC,
 });
 
 // keccak256("balanceOf(address)") — the only ERC-721 method we need

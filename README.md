@@ -11,17 +11,17 @@ bun install
 bun dev
 ```
 
-Open <http://localhost:3000>. The local store is `data/shim.sqlite`.
+Open <http://localhost:3000>. The local store is `data/shim.sqlite`. A local `.env` needs `HUB_GRPC_ENDPOINT`, `UPSTASH_REDIS_REST_URL`, and `UPSTASH_REDIS_REST_TOKEN`. On a box, `install.sh` writes those.
 
 ## Install on Debian
 
-`install.sh` is idempotent and Debian-only. As root it adds a 2G swapfile, installs Docker Engine and the Compose plugin from Docker's Debian apt repo, puts the invoking user in the `docker` group, clones this repo and lmdis under `/opt`, and stages `/opt/shim/.env` from `.env.example` when that file is missing. It does not write real secrets, start Compose, or install cloudflared.
+`install.sh` is idempotent and Debian-only. As root it adds a 2G swapfile, installs Docker Engine and the Compose plugin from Docker's Debian apt repo, puts the invoking user in the `docker` group, and clones this repo and lmdis under `/opt`. When `/opt/shim/.env` is missing it writes one: a 32-byte token from `openssl rand -hex 32` goes in both `LMDIS_REST_TOKEN` and `UPSTASH_REDIS_REST_TOKEN`, mode `600`, and the value is not printed. A re-run leaves an existing `.env` in place. It does not start Compose or install cloudflared.
 
 ```bash
 sudo bash install.sh
 ```
 
-Log out and back in if the script added you to the `docker` group. Fill the `CHANGE_ME` values in `/opt/shim/.env` (`LMDIS_REST_TOKEN` and `UPSTASH_REDIS_REST_TOKEN` must match), then:
+Log out and back in if the script added you to the `docker` group. Then:
 
 ```bash
 cd /opt/shim
