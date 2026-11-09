@@ -22,13 +22,17 @@ import { upsertCasts } from "./sqlite";
 import redis, { Ttl } from "./redis";
 import { hexToUint8Array, uin8ArrayToHex } from "./util";
 
-const DEV = process.env.DEV === "FALSE";
 const DO_STREAM = false;
 
 invariant(process.env.HUB_GRPC_ENDPOINT, "HUB_GRPC_ENDPOINT is not set");
 const hubRpcEndpoint = process.env.HUB_GRPC_ENDPOINT;
 
-const client = !DEV
+// Tests set this so importing the module does not open a gRPC connection.
+// Unset in production. A DEV=FALSE string used to mean the same thing and
+// surprised anyone who set DEV=0 or DEV=false.
+const hubGrpcDisabled = process.env.HUB_GRPC_DISABLED === "1";
+
+const client = !hubGrpcDisabled
 	? getInsecureHubRpcClient(hubRpcEndpoint, {
 			"grpc.max_receive_message_length": 20 * 1024 * 1024,
 			"grpc.keepalive_time_ms": 30000,

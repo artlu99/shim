@@ -76,7 +76,6 @@ if [ ! -f "$shim_dir/.env" ]; then
 			echo "failed to generate lmdis token" >&2
 			exit 1
 		fi
-		# SQLITE_PATH is set by compose. Do not set DEV (DEV=FALSE disables gRPC).
 		cat > "$shim_dir/.env" <<EOF
 # written by install.sh. do not commit.
 SHIM_PORT=${SHIM_PORT}

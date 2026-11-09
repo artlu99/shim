@@ -2,10 +2,10 @@ import { afterAll, beforeAll, describe, expect, it, spyOn, type Mock } from "bun
 import { MAX_SYNC_MESSAGES } from "../../constants";
 
 // Stubs must be in place before the dynamic imports in beforeAll run:
-// hub-grpc throws at import time without HUB_GRPC_ENDPOINT, and env DEV=FALSE
-// selects its no-client path (the flag logic is inverted — "FALSE" disables).
+// hub-grpc throws at import time without HUB_GRPC_ENDPOINT. HUB_GRPC_DISABLED=1
+// selects the no-client path so this file does not dial a hub.
 process.env.HUB_GRPC_ENDPOINT ??= "grpc://localhost:2283";
-process.env.DEV = "FALSE";
+process.env.HUB_GRPC_DISABLED = "1";
 
 let processFids: typeof import("../../routes/refresh").processFids;
 let getCastsByFidSpy: Mock<(...args: any[]) => any>;
