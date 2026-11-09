@@ -60,4 +60,4 @@ Copy `backup.sqlite` onto the new volume as `shim.sqlite`. Or leave the file emp
 
 ## Version
 
-`package.json` `version` is the release. Tag that commit `vX.Y.Z`. `GET /info` reports the version, the `SHIM_GIT_SHA` baked in at image build (`unknown` when unset), process memory, load average, the sqlite file size, and cast/follow counts.
+`package.json` `version` is the release. Tag that commit `vX.Y.Z`. `GET /info` reports the version, the `SHIM_GIT_SHA` baked in at image build (`unknown` when unset), the process start time, resident memory, the sqlite file size, and cast counts (stored, live, and distinct fids). `sqliteBytes` is null for an in-memory store.

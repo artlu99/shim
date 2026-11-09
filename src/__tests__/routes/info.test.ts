@@ -52,19 +52,9 @@ describe("/info", () => {
 			version: string;
 			gitSha: string;
 			startedAt: string;
-			uptimeSec: number;
 			resources: {
 				rssBytes: number;
-				heapUsedBytes: number;
-				heapTotalBytes: number;
-				externalBytes: number;
-				loadavg: number[];
-				sqlite: {
-					path: string;
-					bytes: number | null;
-					walBytes: number | null;
-					shmBytes: number | null;
-				};
+				sqliteBytes: number | null;
 			};
 			database: {
 				casts: number;
@@ -76,12 +66,8 @@ describe("/info", () => {
 		expect(body.version).toBe("1.0.0");
 		expect(body.gitSha).toBe("abc1234");
 		expect(Number.isNaN(Date.parse(body.startedAt))).toBe(false);
-		expect(body.uptimeSec).toBeGreaterThanOrEqual(0);
 		expect(body.resources.rssBytes).toBeGreaterThan(0);
-		expect(body.resources.heapUsedBytes).toBeGreaterThan(0);
-		expect(body.resources.loadavg).toHaveLength(3);
-		expect(body.resources.sqlite.path).toBe(dbPath);
-		expect(body.resources.sqlite.bytes).toBeGreaterThan(0);
+		expect(body.resources.sqliteBytes).toBeGreaterThan(0);
 		expect(body.database).toEqual({
 			casts: 2,
 			liveCasts: 1,
