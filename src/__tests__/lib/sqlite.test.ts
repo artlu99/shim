@@ -7,10 +7,10 @@ import {
 	closeDb,
 	getCastByHash,
 	getCastByShortHash,
+	getInfoCounts,
 	getLatestCastTimestamps,
 	getReverseChronFeed,
 	getStats,
-	insertFollows,
 	upsertCasts,
 } from "../../lib/sqlite";
 import type { Cast } from "../../types";
@@ -162,24 +162,43 @@ describe("sqlite store", () => {
 		});
 	});
 
-	describe("insertFollows", () => {
-		it("replaces a fid's graph and counts inserted rows", async () => {
-			const inserted = await insertFollows([
-				{ fid: 1, target: 2 },
-				{ fid: 1, target: 3 },
-			]);
-			expect(inserted).toBe(2);
-
-			const replaced = await insertFollows([{ fid: 1, target: 4 }]);
-			expect(replaced).toBe(1);
-		});
-	});
-
 	describe("persistence", () => {
 		it("survives close and reopen of the file", async () => {
 			await closeDb();
 			const cast = await getCastByHash(hash(5));
 			expect(cast).toMatchObject({ hash: hash(5) });
+		});
+	});
+
+	describe("follows migration", () => {
+		it("drops a legacy follows table when the store opens", async () => {
+			// simulate a store written by an older build that still had the
+			// follows table, with a row in it
+			const legacyPath = join(
+				mkdtempSync(join(tmpdir(), "shim-legacy-")),
+				"legacy.sqlite",
+			);
+			const legacy = new Database(legacyPath);
+			legacy.run(
+				"CREATE TABLE IF NOT EXISTS follows (" +
+					"fid INTEGER NOT NULL, target INTEGER NOT NULL, PRIMARY KEY (fid, target))",
+			);
+			legacy.run("INSERT INTO follows VALUES (1, 2)");
+			legacy.close();
+
+			// reopening through the store runs the DDL, which drops the table
+			process.env.SQLITE_PATH = legacyPath;
+			await closeDb();
+			const counts = await getInfoCounts();
+			expect(counts.casts).toBe(0);
+
+			const side = new Database(legacyPath);
+			const tables = side
+				.prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+				.all() as { name: string }[];
+			side.close();
+
+			expect(tables.map((row) => row.name)).not.toContain("follows");
 		});
 	});
 });

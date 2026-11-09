@@ -18,9 +18,11 @@ import type { Cast } from "../types";
 import { pluralize } from "./util";
 
 /*
-	SQLite (bun:sqlite) store for casts and follows.
+	SQLite (bun:sqlite) store for casts.
 
-	- DDL below is applied automatically on first open.
+	- DDL below is applied automatically on first open. It also migrates:
+	  the legacy follows table is dropped on open (nothing has read or
+	  written it since the Neon removal).
 	- WAL + synchronous=NORMAL: consistent across app crashes, may lose the
 	  last few commits on OS/power crash — acceptable for a cache of hub data.
 	- PRAGMA case_sensitive_like=ON keeps prefix lookups case-sensitive
@@ -47,11 +49,9 @@ CREATE INDEX IF NOT EXISTS casts_fid_timestamp_idx
 	ON casts (fid, timestamp DESC)
 	WHERE deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS follows (
-	fid INTEGER NOT NULL,
-	target INTEGER NOT NULL,
-	PRIMARY KEY (fid, target)
-);
+-- migration: the follows table is dead (no reader, no writer since the
+-- Neon removal); drop it from stores created by older builds
+DROP TABLE IF EXISTS follows;
 `;
 
 export const DEFAULT_SQLITE_PATH = "data/shim.sqlite";
@@ -62,10 +62,6 @@ export interface Database {
 		fid: number;
 		timestamp: string;
 		deleted_at: string | null;
-	};
-	follows: {
-		fid: number;
-		target: number;
 	};
 }
 
@@ -282,7 +278,7 @@ export const sqliteFilePath = (): string =>
 
 // Cheap local counts for /info. No username lookups, no top-N scan.
 export const getInfoCounts = async () => {
-	const [casts, liveCasts, follows, fids] = await Promise.all([
+	const [casts, liveCasts, fids] = await Promise.all([
 		db()
 			.selectFrom("casts")
 			.select((eb) => eb.fn.countAll().as("n"))
@@ -291,10 +287,6 @@ export const getInfoCounts = async () => {
 			.selectFrom("casts")
 			.select((eb) => eb.fn.countAll().as("n"))
 			.where("deleted_at", "is", null)
-			.executeTakeFirst(),
-		db()
-			.selectFrom("follows")
-			.select((eb) => eb.fn.countAll().as("n"))
 			.executeTakeFirst(),
 		db()
 			.selectFrom("casts")
@@ -306,7 +298,6 @@ export const getInfoCounts = async () => {
 	return {
 		casts: countOf(casts?.n),
 		liveCasts: countOf(liveCasts?.n),
-		follows: countOf(follows?.n),
 		fids: countOf(fids?.n),
 	};
 };
@@ -365,24 +356,4 @@ export const getReverseChronFeed = async (
 		items: results,
 		nextCursor,
 	};
-};
-
-export const insertFollows = async (
-	followsToInsert: { fid: number; target: number }[],
-): Promise<number> => {
-	const fid = followsToInsert[0].fid;
-	try {
-		await db().deleteFrom("follows").where("fid", "=", fid).execute();
-
-		const result = await db()
-			.insertInto("follows")
-			.values(followsToInsert.map(({ target }) => ({ fid, target })))
-			.onConflict((oc) => oc.columns(["fid", "target"]).doNothing())
-			.execute();
-
-		return Number(result[0]?.numInsertedOrUpdatedRows ?? 0);
-	} catch (e) {
-		console.error(`Error upserting follows for fid ${fid}:`, e);
-		return 0;
-	}
 };

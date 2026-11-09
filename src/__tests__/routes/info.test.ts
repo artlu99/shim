@@ -13,7 +13,7 @@ process.env.SQLITE_PATH = dbPath;
 process.env.SHIM_GIT_SHA = "abc1234";
 
 const { info } = await import("../../routes/info");
-const { closeDb, insertFollows, upsertCasts } = await import("../../lib/sqlite");
+const { closeDb, upsertCasts } = await import("../../lib/sqlite");
 
 const hash = (n: number): `0x${string}` =>
 	`0x${n.toString(16).padStart(8, "0")}${"a".repeat(32)}`;
@@ -43,7 +43,6 @@ describe("/info", () => {
 			hash(2),
 		]);
 		side.close();
-		await insertFollows([{ fid: 7, target: 9 }]);
 
 		const res = await new Elysia().use(info).handle(
 			new Request("http://localhost/info"),
@@ -70,7 +69,6 @@ describe("/info", () => {
 			database: {
 				casts: number;
 				liveCasts: number;
-				follows: number;
 				fids: number;
 			};
 		};
@@ -87,7 +85,6 @@ describe("/info", () => {
 		expect(body.database).toEqual({
 			casts: 2,
 			liveCasts: 1,
-			follows: 1,
 			fids: 1,
 		});
 	});

@@ -77,7 +77,6 @@ export const info = new Elysia().get(
 			database: t.Object({
 				casts: t.Number(),
 				liveCasts: t.Number(),
-				follows: t.Number(),
 				fids: t.Number(),
 			}),
 		}),

@@ -1,6 +1,6 @@
 # shim
 
-The Shim API is a thin Farcaster read layer. It runs on [Bun](https://bun.sh/) and [Elysia](https://elysiajs.com/), stores casts and follows in SQLite, and caches through a sibling [lmdis](https://github.com/artlu99/lmdis) service. Production is Docker Compose on a Debian VPS.
+The Shim API is a thin Farcaster read layer. It runs on [Bun](https://bun.sh/) and [Elysia](https://elysiajs.com/), stores casts in SQLite, and caches through a sibling [lmdis](https://github.com/artlu99/lmdis) service. Production is Docker Compose on a Debian VPS.
 
 The last Render/Neon tree is the `cloud-final` tag.
 
