@@ -2,8 +2,6 @@ import { cors } from "@elysiajs/cors";
 import { cron } from "@elysiajs/cron";
 import { Html, html } from "@elysiajs/html";
 import { createMarkdownFromOpenApi } from "@scalar/openapi-to-markdown";
-import { config as dotenvConfig } from "dotenv";
-import "dotenv/config";
 import { Elysia } from "elysia";
 import { getAllCastsAndRepliesByUsername } from "./routes/allCasts";
 import { getCastByFidAndHash } from "./routes/castByFidAndHash";
@@ -21,8 +19,6 @@ import { socialContract } from "./routes/social-contract";
 import { stats } from "./routes/stats";
 import { timestamp } from "./routes/timestamps";
 import { livenessFids } from "./static/artlu";
-
-dotenvConfig();
 
 const port = process.env.PORT || 3000;
 

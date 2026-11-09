@@ -15,7 +15,6 @@
 		"@farcaster/hub-nodejs": "^0.17.0",
 		"@scalar/openapi-to-markdown": "^1.5.4",
 		"date-fns": "^4.4.0",
-		"dotenv": "^18.0.8",
 		"elysia": "^1.4.30",
 		"itty-fetcher": "1.0.10",
 		"kysely": "^0.29.6",
