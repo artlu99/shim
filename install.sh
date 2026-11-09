@@ -3,7 +3,8 @@
 #   bash install.sh
 # Expects git, Docker Engine, and the Compose plugin to already be installed.
 # Checks the docker group and does not change it.
-# Clones to $HOME/shim and $HOME/lmdis. The app binds 127.0.0.1:7300.
+# Clones to $HOME/shim and $HOME/lmdis. The app binds 127.0.0.1:${SHIM_PORT:-7300}.
+#   SHIM_PORT=7301 bash install.sh
 # When $HOME/shim/.env is missing, writes one with a random lmdis token.
 # Does not print that token, start Compose, or install cloudflared.
 set -euo pipefail
@@ -31,6 +32,12 @@ fi
 if ! id -nG | grep -qw docker; then
 	echo "NOTE: $USER is not in the docker group. This script will not change groups." >&2
 	echo "      docker compose will fail until an admin adds you and you start a new login." >&2
+fi
+
+SHIM_PORT=${SHIM_PORT:-7300}
+if [[ ! "$SHIM_PORT" =~ ^[0-9]+$ ]] || [ "$SHIM_PORT" -lt 1 ] || [ "$SHIM_PORT" -gt 65535 ]; then
+	echo "SHIM_PORT must be an integer from 1 to 65535" >&2
+	exit 1
 fi
 
 shim_dir="${HOME}/shim"
@@ -72,6 +79,7 @@ if [ ! -f "$shim_dir/.env" ]; then
 		# SQLITE_PATH is set by compose. Do not set DEV (DEV=FALSE disables gRPC).
 		cat > "$shim_dir/.env" <<EOF
 # written by install.sh. do not commit.
+SHIM_PORT=${SHIM_PORT}
 UPSTASH_REDIS_REST_URL=http://lmdis:3000
 UPSTASH_REDIS_REST_TOKEN=${token}
 LMDIS_REST_TOKEN=${token}
@@ -88,10 +96,19 @@ EOF
 	echo "wrote $shim_dir/.env with a new lmdis token (not printed)"
 else
 	echo "$shim_dir/.env already exists, leaving it"
+	echo "edit SHIM_PORT in that file to change the host port"
+fi
+
+listen_port=7300
+if [ -f "$shim_dir/.env" ]; then
+	file_port=$(sed -n 's/^SHIM_PORT=//p' "$shim_dir/.env" | head -n 1)
+	if [ -n "$file_port" ]; then
+		listen_port=$file_port
+	fi
 fi
 
 echo "Next:"
 echo "  cd $shim_dir"
 echo "  SHIM_GIT_SHA=\$(git rev-parse --short HEAD) docker compose up -d --build"
-echo "  curl -s localhost:7300/health"
-echo "  curl -s localhost:7300/info"
+echo "  curl -s localhost:${listen_port}/health"
+echo "  curl -s localhost:${listen_port}/info"

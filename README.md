@@ -21,6 +21,12 @@ Open <http://localhost:3000>. The local store is `data/shim.sqlite`. A local `.e
 bash install.sh
 ```
 
+If 7300 is already taken, set `SHIM_PORT` before the first run. Compose reads that value from `.env`. If `.env` already exists, edit `SHIM_PORT` there instead. The container still listens on 3000.
+
+```bash
+SHIM_PORT=7301 bash install.sh
+```
+
 Then:
 
 ```bash
@@ -30,9 +36,11 @@ curl -s localhost:7300/health
 curl -s localhost:7300/info
 ```
 
+Use the port from `.env` in that curl when it is not 7300.
+
 ## Ingress
 
-Point an existing remotely-managed cloudflared public hostname at `http://127.0.0.1:7300`. Optional: Cloudflare Access on the path `refresh`, which is the only mutating route. The in-process refresh cron never leaves the box, so Access does not affect it. The host port is bound to loopback, so it is not behind Access.
+Point an existing remotely-managed cloudflared public hostname at `http://127.0.0.1:7300`, or at the `SHIM_PORT` in `.env` when that is different. Optional: Cloudflare Access on the path `refresh`, which is the only mutating route. The in-process refresh cron never leaves the box, so Access does not affect it. The host port is bound to loopback, so it is not behind Access.
 
 ## Seed and backup
 

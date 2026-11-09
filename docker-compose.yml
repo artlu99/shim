@@ -12,10 +12,11 @@ services:
       # SQLite store path on the shimdata volume below; .env must NOT set
       # SQLITE_PATH (compose wins, but keep the two from drifting)
       SQLITE_PATH: /app/data/shim.sqlite
-    # LOAD-BEARING binding: the host's existing cloudflared (remotely-managed
-    # systemd service) ingress targets http://localhost:7300. Do not remove.
+    # Loopback only. The container listens on 3000. SHIM_PORT in .env
+    # changes the host port when 7300 is already taken. Cloudflared must
+    # target whichever host port this publishes.
     ports:
-      - "127.0.0.1:7300:3000"
+      - "127.0.0.1:${SHIM_PORT:-7300}:3000"
     depends_on:
       lmdis:
         condition: service_healthy
