@@ -2,7 +2,7 @@
 # Idempotent shim setup for the deploy user. Do not run as root.
 #   bash install.sh
 # Expects git, Docker Engine, and the Compose plugin to already be installed.
-# Checks the docker group and does not change it.
+# A rootless daemon is the preferred path. A rootful one warns and continues.
 # Clones to $HOME/shim and $HOME/lmdis. The app binds 127.0.0.1:${SHIM_PORT:-7300}.
 #   SHIM_PORT=7301 bash install.sh
 # When $HOME/shim/.env is missing, writes one with a random lmdis token.
@@ -29,15 +29,32 @@ if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>
 	exit 1
 fi
 
-if ! id -nG | grep -qw docker; then
-	echo "NOTE: $USER is not in the docker group. This script will not change groups." >&2
-	echo "      docker compose will fail until an admin adds you and you start a new login." >&2
-fi
-
 SHIM_PORT=${SHIM_PORT:-7300}
 if [[ ! "$SHIM_PORT" =~ ^[0-9]+$ ]] || [ "$SHIM_PORT" -lt 1 ] || [ "$SHIM_PORT" -gt 65535 ]; then
 	echo "SHIM_PORT must be an integer from 1 to 65535" >&2
 	exit 1
+fi
+
+# SecurityOptions from `docker info` includes name=rootless when the daemon
+# this user is talking to is rootless. The docker group is root-equivalent.
+# A rootful daemon warns and the install continues. Moving to rootless can
+# happen later; the steps are the same ones this script is about to run.
+warn_rootful() {
+	cat >&2 <<EOF
+WARNING: $1
+Rootless mode keeps container access off the host root account. Joining the
+docker group is root-equivalent. You can move to rootless over time. The
+install below is the same either way.
+Rootless setup: https://docs.docker.com/engine/security/rootless/
+EOF
+}
+
+if ! security=$(docker info --format '{{range .SecurityOptions}}{{println .}}{{end}}' 2>/dev/null); then
+	warn_rootful "docker info failed, so this session is not using a rootless daemon."
+elif ! printf '%s\n' "$security" | grep -q 'rootless'; then
+	warn_rootful "docker info does not report rootless mode."
+else
+	echo "docker is rootless"
 fi
 
 shim_dir="${HOME}/shim"
