@@ -15,6 +15,7 @@ describeLive("F-U Routes", () => {
 				{ fid: 2, expectedUsername: "v" },
 				{ fid: 3, expectedUsername: "dwr" },
 				{ fid: 1689, expectedUsername: "stephancill" },
+				{ fid: 230238, expectedUsername: "mvr" },
 			];
 
 			for (const { fid, expectedUsername } of testCases) {
@@ -47,6 +48,7 @@ describeLive("F-U Routes", () => {
 				{ username: "v", expectedFid: 2 },
 				{ username: "danromero.eth", expectedFid: 3 },
 				{ username: "stephancill", expectedFid: 1689 },
+				{ username: "mvr", expectedFid: 230238 },
 			];
 
 			for (const { username, expectedFid } of testCases) {
@@ -76,13 +78,25 @@ describeLive("F-U Routes", () => {
 	describe("GET /user/:fid", () => {
 		it("should get hydrated user by fid successfully", async () => {
 			const testCases = [
-				// /user.username is the same hub preferred name /u returns
+				// /user.username is the same hub preferred name /u returns.
+				// mvr's newest proof is warpl.eth; that stays an attestation.
 				{ fid: 2, expectedUsername: "v" },
 				{ fid: 3, expectedUsername: "dwr" },
 				{ fid: 1689, expectedUsername: "stephancill" },
+				{
+					fid: 230238,
+					expectedUsername: "mvr",
+					expectedFname: "mvr",
+					expectedAttestations: ["warpl.eth", "martinvr.eth"],
+				},
 			];
 
-			for (const { fid, expectedUsername } of testCases) {
+			for (const {
+				fid,
+				expectedUsername,
+				expectedFname,
+				expectedAttestations,
+			} of testCases) {
 				const response = await app.handle(
 					new Request(`http://localhost/user/${fid}`),
 				);
@@ -93,6 +107,10 @@ describeLive("F-U Routes", () => {
 				expect(data.user).toBeDefined();
 				expect(data.user.fid).toBe(fid);
 				expect(data.user.username).toBe(expectedUsername);
+				if (expectedFname) {
+					expect(data.user.fname).toBe(expectedFname);
+					expect(data.user.attestations).toEqual(expectedAttestations);
+				}
 				expect(typeof data.user.displayName).toBe("string");
 				expect(typeof data.user.pfpUrl).toBe("string");
 				expect(typeof data.user.primaryAddress).toBe("string");

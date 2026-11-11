@@ -216,6 +216,26 @@ export const splitUsernameProofs = (
 	return { fname: fnames[0] ?? null, attestations };
 };
 
+// Username is the hub's USER_DATA_TYPE_USERNAME message. Proofs contribute
+// the fname and ENS attestations only — a newer ENS proof does not become
+// the username.
+export const profileNames = (
+	proofs: UserNameProof[] | undefined,
+	messages: UserDataAddMessage[] | undefined,
+): {
+	username: string | null;
+	fname: string | null;
+	attestations: string[];
+} => {
+	const { fname, attestations } = splitUsernameProofs(proofs);
+	const username =
+		(messages ?? []).find(
+			// @ts-expect-error the typing is a white lie because it was deserialized over http
+			(m) => m.data.userDataBody.type === "USER_DATA_TYPE_USERNAME",
+		)?.data.userDataBody.value ?? null;
+	return { username, fname, attestations };
+};
+
 export const getHubUserByFid = async (
 	fid: number,
 ): Promise<User | undefined> => {
@@ -231,15 +251,11 @@ export const getHubUserByFid = async (
 				Ttl.MEDIUM,
 			),
 		]);
-		const { fname, attestations } = splitUsernameProofs(res0.proofs);
 		const messages = res?.messages ?? [];
-
-		// Hub preferred name. Proof timestamps do not elect this.
-		const username =
-			messages.find(
-				// @ts-expect-error the typing is a white lie because it was deserialized over http
-				(m) => m.data.userDataBody.type === "USER_DATA_TYPE_USERNAME",
-			)?.data.userDataBody.value ?? null;
+		const { username, fname, attestations } = profileNames(
+			res0.proofs,
+			messages,
+		);
 
 		if (messages.length === 0 && !fname && attestations.length === 0) {
 			return undefined;

@@ -3,7 +3,7 @@
 // split does not produce one. Fixtures are real node answers (probed Oct
 // 2026 against /v1/userNameProofsByFid), including dwr's duplicate fname rows.
 import { describe, expect, test } from "bun:test";
-import { splitUsernameProofs } from "../../lib/hub-api";
+import { profileNames, splitUsernameProofs } from "../../lib/hub-api";
 
 // arfonzo (fid 191503): the ENS proof is newer than the fname. The fname
 // stays arfonzo; the ENS is only an attestation.
@@ -115,5 +115,48 @@ describe("splitUsernameProofs", () => {
 				{ name: 42, type: "USERNAME_TYPE_FNAME" },
 			] as never),
 		).toEqual({ fname: null, attestations: [] });
+	});
+});
+
+// mvr (fid 230238), probed 2026-11-11. warpl.eth is the newest proof. The
+// hub preferred name is still the fname, via USER_DATA_TYPE_USERNAME.
+const MVR_PROOFS = [
+	{
+		timestamp: 1718112115,
+		name: "martinvr.eth",
+		type: "USERNAME_TYPE_ENS_L1",
+	},
+	{
+		timestamp: 1761580416,
+		name: "warpl.eth",
+		type: "USERNAME_TYPE_ENS_L1",
+	},
+	{
+		timestamp: 1705860167,
+		name: "mvr",
+		type: "USERNAME_TYPE_FNAME",
+	},
+];
+
+const MVR_USER_DATA = [
+	{ data: { userDataBody: { type: "USER_DATA_TYPE_USERNAME", value: "mvr" } } },
+	{ data: { userDataBody: { type: "USER_DATA_TYPE_DISPLAY", value: "mvr 🐹" } } },
+];
+
+describe("profileNames", () => {
+	test("mvr's newer ENS proofs stay attestations", () => {
+		expect(profileNames(MVR_PROOFS as never, MVR_USER_DATA as never)).toEqual({
+			username: "mvr",
+			fname: "mvr",
+			attestations: ["warpl.eth", "martinvr.eth"],
+		});
+	});
+
+	test("a missing preferred-name message leaves username null", () => {
+		expect(profileNames(MVR_PROOFS as never, [] as never)).toEqual({
+			username: null,
+			fname: "mvr",
+			attestations: ["warpl.eth", "martinvr.eth"],
+		});
 	});
 });
