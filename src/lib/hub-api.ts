@@ -165,24 +165,21 @@ export const getHubFidByUsername = async (
 };
 
 /**
- * Split the fid's username proofs into the USERNAME, the PRIMARY name and
- * its ATTESTATIONS (identity law, 2026-10-27 forkcaster profile rethink):
- * username is the NEWEST proof of any type — the historical /user/{fid}
- * contract (proofs[0] under reverse=true). fname is the account's primary
- * handle — the NEWEST fname proof, one per fid (an older fname may have
- * transferred away) — while any number of ENS names (L1 or L2/basenames)
- * are verified attestations, displayed alongside the primary and never
- * load-bearing. The input arrives deserialized over http (typing is a
- * white lie); the node answers with duplicate rows (measured: dwr/fid 3
- * carries the same fname proof twice), so names are deduped. Its row
- * order is NOT timestamp-sorted (measured, with or without reverse=true),
- * so rows are sorted NEWEST-FIRST here — stable: timestamp ties keep node
- * order — and every field is deterministic regardless of the node.
+ * Split the fid's username proofs into the fname and its ENS attestations.
+ * fname is the newest USERNAME_TYPE_FNAME proof, one per fid (an older fname
+ * may have transferred away). Every other proof type (ENS L1, basename) is
+ * an attestation, newest first. The hub's preferred username is not derived
+ * here — that is the USER_DATA_TYPE_USERNAME user-data message. The input
+ * arrives deserialized over http (typing is a white lie); the node answers
+ * with duplicate rows (measured: dwr/fid 3 carries the same fname proof
+ * twice), so names are deduped. Its row order is NOT timestamp-sorted
+ * (measured, with or without reverse=true), so rows are sorted NEWEST-FIRST
+ * here — stable: timestamp ties keep node order — and every field is
+ * deterministic regardless of the node.
  */
 export const splitUsernameProofs = (
 	proofs: UserNameProof[] | undefined,
 ): {
-	username: string | null;
 	fname: string | null;
 	attestations: string[];
 } => {
@@ -206,19 +203,17 @@ export const splitUsernameProofs = (
 	const seen = new Set<string>();
 	const fnames: string[] = [];
 	const attestations: string[] = [];
-	let username: string | null = null;
 	for (const { row } of rows) {
 		if (typeof row.name !== "string" || row.name === "" || seen.has(row.name))
 			continue;
 		seen.add(row.name);
-		if (username === null) username = row.name;
 		// protobuf JSON serializes the enum as its name string; accept the
 		// numeric form too (1 = USERNAME_TYPE_FNAME). A non-fname proof is
 		// an attestation by definition — verified, attached, decorative.
 		const isFname = row.type === "USERNAME_TYPE_FNAME" || row.type === 1;
 		(isFname ? fnames : attestations).push(row.name);
 	}
-	return { username, fname: fnames[0] ?? null, attestations };
+	return { fname: fnames[0] ?? null, attestations };
 };
 
 export const getHubUserByFid = async (
@@ -226,36 +221,44 @@ export const getHubUserByFid = async (
 ): Promise<User | undefined> => {
 	try {
 		// typing is a white lie because it was deserialized over http
-		const res0 = await cachedFetcherGet<{ proofs: UserNameProof[] }>(
-			`/v1/userNameProofsByFid?fid=${fid}&reverse=true`,
-			Ttl.LONG,
-		);
-		const { username, fname, attestations } = splitUsernameProofs(
-			res0.proofs,
-		);
+		const [res0, res] = await Promise.all([
+			cachedFetcherGet<{ proofs: UserNameProof[] }>(
+				`/v1/userNameProofsByFid?fid=${fid}&reverse=true`,
+				Ttl.LONG,
+			),
+			cachedFetcherGet<PaginatedMessagesResponse<UserDataAddMessage>>(
+				`/v1/userDataByFid?fid=${fid}&reverse=true`,
+				Ttl.MEDIUM,
+			),
+		]);
+		const { fname, attestations } = splitUsernameProofs(res0.proofs);
+		const messages = res?.messages ?? [];
 
-		if (!username) {
+		// Hub preferred name. Proof timestamps do not elect this.
+		const username =
+			messages.find(
+				// @ts-expect-error the typing is a white lie because it was deserialized over http
+				(m) => m.data.userDataBody.type === "USER_DATA_TYPE_USERNAME",
+			)?.data.userDataBody.value ?? null;
+
+		if (messages.length === 0 && !fname && attestations.length === 0) {
 			return undefined;
 		}
 
-		const res = await cachedFetcherGet<
-			PaginatedMessagesResponse<UserDataAddMessage>
-		>(`/v1/userDataByFid?fid=${fid}&reverse=true`, Ttl.MEDIUM);
-
 		const displayName =
-			res?.messages.find(
+			messages.find(
 				// @ts-expect-error the typing is a white lie because it was deserialized over http
 				(m) => m.data.userDataBody.type === "USER_DATA_TYPE_DISPLAY",
 			)?.data.userDataBody.value ?? null;
 
 		const pfpUrl =
-			res?.messages.find(
+			messages.find(
 				// @ts-expect-error the typing is a white lie because it was deserialized over http
 				(m) => m.data.userDataBody.type === "USER_DATA_TYPE_PFP",
 			)?.data.userDataBody.value ?? null;
 
 		const bio =
-			res?.messages.find(
+			messages.find(
 				// @ts-expect-error the typing is a white lie because it was deserialized over http
 				(m) => m.data.userDataBody.type === "USER_DATA_TYPE_BIO",
 			)?.data.userDataBody.value ?? null;
@@ -286,11 +289,9 @@ export const getUsernameByFid = async (
 	fid: number,
 ): Promise<string | undefined> => {
 	const user = await getHubUserByFid(fid);
-	// Identity law (2026-10-27): the fname is the primary handle — /u
-	// answers it first, falling back to the newest-proof username.
-	const username = user?.fname ?? user?.username ?? undefined;
-
-	return username;
+	// Hub preferred name (USER_DATA_TYPE_USERNAME). A missing message is
+	// null on the user and undefined here, which /u reports as missing.
+	return user?.username ?? undefined;
 };
 
 export const getFollowingByFid = async (

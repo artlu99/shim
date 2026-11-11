@@ -53,10 +53,11 @@ export interface Cast {
 
 export interface User {
 	fid: number;
+	/** Hub preferred name: the USER_DATA_TYPE_USERNAME user-data message. */
 	username: string | null;
-	/** The account's fname — the PRIMARY handle: the newest fname proof (identity law, 2026-10-27). */
+	/** Newest fname proof for this fid. */
 	fname: string | null;
-	/** Verified ENS names (L1 + L2/basenames), newest first — attestations. */
+	/** Verified non-fname username proofs (ENS L1 and basenames), newest first. */
 	attestations: string[];
 	displayName: string | null;
 	pfpUrl: string | null;

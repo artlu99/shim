@@ -1,11 +1,12 @@
-// Offline suite for splitUsernameProofs — the fname-primary/attestations
-// split behind /user/{fid}. Fixtures are real node answers (probed Oct 2026
-// against /v1/userNameProofsByFid), including dwr's duplicate fname rows.
+// Offline suite for splitUsernameProofs — fname plus ENS attestations.
+// The hub preferred username is a user-data message, not a proof, so this
+// split does not produce one. Fixtures are real node answers (probed Oct
+// 2026 against /v1/userNameProofsByFid), including dwr's duplicate fname rows.
 import { describe, expect, test } from "bun:test";
 import { splitUsernameProofs } from "../../lib/hub-api";
 
-// arfonzo (fid 191503): the ENS is the NEWER proof — which is why the
-// newest-proof username answers arfonzo.eth while the fname stays arfonzo.
+// arfonzo (fid 191503): the ENS proof is newer than the fname. The fname
+// stays arfonzo; the ENS is only an attestation.
 const ARFONZO = [
 	{
 		timestamp: 1745928425,
@@ -45,7 +46,6 @@ const DWR = [
 describe("splitUsernameProofs", () => {
 	test("fname is primary; the newer ENS is only an attestation", () => {
 		expect(splitUsernameProofs(ARFONZO as never)).toEqual({
-			username: "arfonzo.eth",
 			fname: "arfonzo",
 			attestations: ["arfonzo.eth"],
 		});
@@ -53,7 +53,6 @@ describe("splitUsernameProofs", () => {
 
 	test("multiple attestations sort newest-first; rows dedupe", () => {
 		expect(splitUsernameProofs(DWR as never)).toEqual({
-			username: "danromero.eth",
 			fname: "dwr",
 			attestations: ["danromero.eth", "dwr.eth"],
 		});
@@ -62,8 +61,8 @@ describe("splitUsernameProofs", () => {
 	// the node answers rows out of timestamp order (DWR above proves it:
 	// danromero.eth answered BEFORE the older dwr.eth) — proofs[0] was
 	// "first row answered", not the newest proof. the newest-first sort
-	// makes username deterministic; renames prove the newest fname wins.
-	test("username is the newest proof; the newest fname is the handle", () => {
+	// makes the fname deterministic; a later fname replaces an earlier one.
+	test("the newest fname wins; an older fname is dropped", () => {
 		expect(
 			splitUsernameProofs([
 				{ timestamp: 100, name: "old", type: "USERNAME_TYPE_FNAME" },
@@ -71,7 +70,6 @@ describe("splitUsernameProofs", () => {
 				{ timestamp: 300, name: "renamed", type: "USERNAME_TYPE_FNAME" },
 			] as never),
 		).toEqual({
-			username: "renamed",
 			fname: "renamed",
 			attestations: ["old.eth"],
 		});
@@ -84,7 +82,6 @@ describe("splitUsernameProofs", () => {
 				{ name: "someone.eth", type: 2 },
 			] as never),
 		).toEqual({
-			username: "someone",
 			fname: "someone",
 			attestations: ["someone.eth"],
 		});
@@ -97,7 +94,6 @@ describe("splitUsernameProofs", () => {
 				{ name: "someone.base.eth", type: "USERNAME_TYPE_ENS_L2" },
 			] as never),
 		).toEqual({
-			username: "someone",
 			fname: "someone",
 			attestations: ["someone.base.eth"],
 		});
@@ -105,12 +101,10 @@ describe("splitUsernameProofs", () => {
 
 	test("empty, missing, and malformed rows degrade honestly", () => {
 		expect(splitUsernameProofs([])).toEqual({
-			username: null,
 			fname: null,
 			attestations: [],
 		});
 		expect(splitUsernameProofs(undefined)).toEqual({
-			username: null,
 			fname: null,
 			attestations: [],
 		});
@@ -120,6 +114,6 @@ describe("splitUsernameProofs", () => {
 				{ name: "", type: "USERNAME_TYPE_FNAME" },
 				{ name: 42, type: "USERNAME_TYPE_FNAME" },
 			] as never),
-		).toEqual({ username: null, fname: null, attestations: [] });
+		).toEqual({ fname: null, attestations: [] });
 	});
 });

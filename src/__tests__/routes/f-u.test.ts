@@ -10,8 +10,7 @@ describeLive("F-U Routes", () => {
 
 	describe("GET /u/:fid", () => {
 		it("should get username by fid successfully", async () => {
-			// /u answers the FNAME first (identity law): the primary handle,
-			// .eth or not
+			// /u answers the hub preferred name (USER_DATA_TYPE_USERNAME)
 			const testCases = [
 				{ fid: 2, expectedUsername: "v" },
 				{ fid: 3, expectedUsername: "dwr" },
@@ -77,11 +76,10 @@ describeLive("F-U Routes", () => {
 	describe("GET /user/:fid", () => {
 		it("should get hydrated user by fid successfully", async () => {
 			const testCases = [
-				// /user returns the NEWEST username proof (the identity-law
-				// username), not the fname that /u answers first
-				{ fid: 2, expectedUsername: "varunsrin.eth" },
-				{ fid: 3, expectedUsername: "danromero.eth" },
-				{ fid: 1689, expectedUsername: "stephancill.eth" },
+				// /user.username is the same hub preferred name /u returns
+				{ fid: 2, expectedUsername: "v" },
+				{ fid: 3, expectedUsername: "dwr" },
+				{ fid: 1689, expectedUsername: "stephancill" },
 			];
 
 			for (const { fid, expectedUsername } of testCases) {
