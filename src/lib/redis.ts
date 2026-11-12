@@ -4,7 +4,7 @@ import { LmdisClient as Redis } from "./lmdis";
 export enum Ttl {
 	SHORT = 60, // 60 seconds
 	FEED = 120, // 2 Minutes
-	MEDIUM = 12 * 60 * 60, // 12 hours
+	MEDIUM = 4 * 60 * 60, // 4 hours
 	LONG = 7 * 24 * 60 * 60, // 7 days
 }
 

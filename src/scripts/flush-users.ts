@@ -2,7 +2,7 @@ import redis from "../lib/redis";
 
 // Delete cached user entities so the next /user/{fid} fetch rebuilds them
 // from the hub. Run this whenever the cached User shape changes — a stale
-// entry serves its old shape until its TTL expires (12h), and hydration
+// entry serves its old shape until its TTL expires (4h), and hydration
 // trusts whatever is in the cache.
 //
 // Also flushes channelFeed:* when doing a full flush, since those embed
