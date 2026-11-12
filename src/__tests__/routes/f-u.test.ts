@@ -114,6 +114,7 @@ describeLive("F-U Routes", () => {
 				expect(typeof data.user.displayName).toBe("string");
 				expect(typeof data.user.pfpUrl).toBe("string");
 				expect(typeof data.user.primaryAddress).toBe("string");
+				expect(typeof data.user.signed).toBe("boolean");
 				expect(data.user).not.toHaveProperty("proNft");
 			}
 		});

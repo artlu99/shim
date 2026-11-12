@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { getHubFidByUsername, getUsernameByFid } from "../lib/hub-api";
 import { getUserByFid } from "../lib/hydration";
+import { hasFidSignedSocialContract } from "../lib/social-contract";
 
 export const fu = new Elysia()
 	.get(
@@ -70,10 +71,13 @@ export const fu = new Elysia()
 	.get(
 		"/user/:fid",
 		async ({ params: { fid } }) => {
-			const user = await getUserByFid(fid);
+			const [user, signed] = await Promise.all([
+				getUserByFid(fid),
+				hasFidSignedSocialContract(fid),
+			]);
 			return {
 				success: true,
-				user,
+				user: { ...user, signed },
 			};
 		},
 		{
@@ -98,6 +102,7 @@ export const fu = new Elysia()
 										displayName: t.String(),
 										pfpUrl: t.String(),
 										primaryAddress: t.String(),
+										signed: t.Boolean(),
 									}),
 								}),
 							},
