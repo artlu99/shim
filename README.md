@@ -21,9 +21,20 @@ bun install
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The local store is `data/shim.sqlite`. A local `.env` needs `HUB_GRPC_ENDPOINT`, `UPSTASH_REDIS_REST_URL`, and `UPSTASH_REDIS_REST_TOKEN` (can be lmdis). On a box, `install.sh` writes those. `HYPERSNAP_API_ENDPOINT` is optional — it defaults to Quilibrium's public node and backs `/h`'s hash-only network resolution on a local-index miss.
+Open [http://localhost:3000](http://localhost:3000). The local store is `data/shim.sqlite`. A local `.env` needs `HUB_GRPC_ENDPOINT`, `UPSTASH_REDIS_REST_URL`, and `UPSTASH_REDIS_REST_TOKEN` (can be lmdis). On a box, `install.sh` writes those. `HYPERSNAP_API_ENDPOINT` is optional — it defaults to Quilibrium's public node and backs `/h`'s hash-only network resolution on a local-index miss. `HAATZ_GATEWAY_ENDPOINT` is optional too and defaults to the same node; it backs the `/v1` gateway that corpus sync and user hydration use.
 
 The last Render/Neon tree was the `cloud-final` tag.
+
+## The Snapchain vs Hypersnap fork
+
+Snapchain and Hypersnap are forked (2026-11-12): a message on one is not guaranteed to appear on the other. shim treats a hash or a user on either world as valid. Hypersnap is primary everywhere — cast resolution, corpus sync (`/refresh`, feeds), and user hydration go to Hypersnap's `/v1` gateway first, and Snapchain gRPC (via `HUB_GRPC_ENDPOINT`) is consulted only on a clean Hypersnap miss or a Hypersnap outage. A miss on both worlds answers "not found"; a world that fails without answering is an outage (503), never a false miss.
+
+Two things deliberately stay Snapchain-world only (2026-11-12 23:19 CET):
+
+- **Following-graph expansion.** `POST /refresh` with a `username` resolves the follow list on Snapchain only. A Hypersnap-only account's casts sync fine when its fid is named directly or reached by another refresh path, but the username→followees walk never sees it.
+- **Username→fid mappings.** `getHubFidByUsername` (the `/f-u` route, `/wc` URI search, `/:username/casts-and-replies`) resolves names through Snapchain proofs. A Hypersnap-only account's username will not resolve to its fid until this moves or the fork heals.
+
+Both are revisited when the two networks realign — or when the follow graph and name proofs are needed from the Hypersnap world, which the same gateway already serves.
 
 ## Install
 
