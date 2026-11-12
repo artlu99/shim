@@ -53,8 +53,9 @@ const mockUser2 = {
 	primaryAddress: null,
 };
 
-// Create spies that we can configure per test
-const hubUserSpy = spyOn(hubApi, "getHubUserByFid");
+// Create spies that we can configure per test. hydration goes through the
+// fork-aware wrapper now, so the direct dependency is the wrapper.
+const hubUserSpy = spyOn(hubApi, "getUserInEitherWorld");
 const primaryAddressSpy = spyOn(warpcast, "getUserPrimaryAddress");
 
 describe("Hydration Functions", () => {

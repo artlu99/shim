@@ -1,6 +1,6 @@
 import { HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import type { User } from "../types";
-import { getHubUserByFid } from "./hub-api";
+import { getUserInEitherWorld } from "./hub-api";
 import redis, { Ttl } from "./redis";
 import { mapBatch } from "./util";
 import { getUserPrimaryAddress } from "./warpcast";
@@ -45,7 +45,7 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 		}
 
 		const [hubUser, primaryAddress] = await Promise.all([
-			getHubUserByFid(fid),
+			getUserInEitherWorld(fid),
 			getUserPrimaryAddress(fid),
 		]);
 
@@ -134,7 +134,8 @@ export const hydrateText = async (
 	const usernameMentions = await mapBatch(
 		mentions ?? [],
 		async (mention) => {
-			const user = await getHubUserByFid(mention);
+			// fork-aware: a mentioned user may exist only in either world
+			const user = await getUserInEitherWorld(mention);
 			return user?.username ?? "<unknown>";
 		},
 		HTTP_FAN_OUT_BATCH_SIZE,

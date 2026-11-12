@@ -67,10 +67,11 @@ afterEach(() => {
 	globalThis.fetch = originalFetch;
 });
 
-// hydrateText resolves mention usernames over the network (hub-api);
-// stub it there so the mapping tests never leave the process
+// hydrateText resolves mention usernames over the network (hub-api's
+// fork-aware wrapper); stub it there so the mapping tests never leave
+// the process
 const stubHydration = () => {
-	hydrateSpy = spyOn(hubApi, "getHubUserByFid").mockImplementation(
+	hydrateSpy = spyOn(hubApi, "getUserInEitherWorld").mockImplementation(
 		async (fid: number) => ({ fid, username: `user${fid}` }) as any,
 	);
 };

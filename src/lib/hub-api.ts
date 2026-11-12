@@ -1,6 +1,6 @@
 import { fetcher } from "itty-fetcher";
 import { retry, sift } from "radash";
-import { VERBOSE_LOGGING } from "../constants";
+import { HAATZ_GATEWAY_ENDPOINT, VERBOSE_LOGGING } from "../constants";
 import type { User } from "../types";
 import type { Hex } from "viem";
 import type {
@@ -65,6 +65,59 @@ const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 	);
 
 	await cacheClient.set(cacheKey, JSON.stringify(res), { ex: ttl });
+
+	return res as T;
+};
+
+// The haatz node serves the same /v1 gateway surface on 443 (see
+// constants.ts). User identity lives in both worlds under the fork — a
+// Hypersnap-only account has no crackle answer — so user hydration needs
+// the same dual-world treatment casts got. Cache keys are haatz:-prefixed:
+// the two networks disagree, and one key must not serve the other's
+// answer. Cache-leg failures degrade to uncached (same as getCastById);
+// gateway failures THROW — the fork-aware caller owns miss-vs-outage.
+const haatz = () =>
+	fetcher({
+		base: HAATZ_GATEWAY_ENDPOINT,
+		headers: { accept: "application/json" },
+	});
+
+const cachedHaatzGet = async <T>(uri: string, ttl: Ttl) => {
+	let cacheResponse: unknown;
+	try {
+		cacheResponse = await redis().get(`haatz:${uri}`);
+	} catch (error) {
+		console.error(
+			"Error reading haatz cache:",
+			uri,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+	}
+
+	if (cacheResponse) {
+		return cacheResponse as T;
+	}
+
+	const res = await retry(
+		{ backoff: (i) => 10 ** i },
+		async () => {
+			try {
+				return await haatz().get<T>(uri);
+			} catch (error) {
+				throw hubFailure(uri, error);
+			}
+		},
+	);
+
+	try {
+		await redis().set(`haatz:${uri}`, JSON.stringify(res), { ex: ttl });
+	} catch (error) {
+		console.error(
+			"Error writing haatz cache:",
+			uri,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+	}
 
 	return res as T;
 };
@@ -301,10 +354,99 @@ export const getHubUserByFid = async (
 	}
 };
 
+/**
+ * The user as the Hypersnap world holds them: the same two gateway calls
+ * getHubUserByFid makes, against the haatz node, mapped with the same
+ * mappers. undefined is a clean miss (both calls answered empty — the
+ * live-verified unknown-fid shape); a gateway failure THROWS so the
+ * fork-aware caller can withhold the verdict. primaryAddress is null
+ * here — it comes from the Warpcast backend, not the hub, same as the
+ * Snapchain leg.
+ */
+export const getHaatzUserByFid = async (
+	fid: number,
+): Promise<User | undefined> => {
+	// typing is a white lie because it was deserialized over http
+	const [res0, res] = await Promise.all([
+		cachedHaatzGet<{ proofs: UserNameProof[] }>(
+			`/v1/userNameProofsByFid?fid=${fid}&reverse=true`,
+			Ttl.LONG,
+		),
+		cachedHaatzGet<PaginatedMessagesResponse<UserDataAddMessage>>(
+			`/v1/userDataByFid?fid=${fid}&reverse=true`,
+			Ttl.MEDIUM,
+		),
+	]);
+	const messages = res?.messages ?? [];
+	const { username, fname, attestations } = profileNames(
+		res0.proofs,
+		messages,
+	);
+
+	if (messages.length === 0 && !fname && attestations.length === 0) {
+		return undefined;
+	}
+
+	const displayName =
+		messages.find(
+			// @ts-expect-error the typing is a white lie because it was deserialized over http
+			(m) => m.data.userDataBody.type === "USER_DATA_TYPE_DISPLAY",
+		)?.data.userDataBody.value ?? null;
+
+	const pfpUrl =
+		messages.find(
+			// @ts-expect-error the typing is a white lie because it was deserialized over http
+			(m) => m.data.userDataBody.type === "USER_DATA_TYPE_PFP",
+		)?.data.userDataBody.value ?? null;
+
+	const bio =
+		messages.find(
+			// @ts-expect-error the typing is a white lie because it was deserialized over http
+			(m) => m.data.userDataBody.type === "USER_DATA_TYPE_BIO",
+		)?.data.userDataBody.value ?? null;
+
+	return {
+		fid,
+		username,
+		fname,
+		attestations,
+		displayName,
+		pfpUrl,
+		bio,
+		primaryAddress: null,
+	};
+};
+
+/**
+ * The fork-aware user primitive — the user-side twin of
+ * getCastInEitherWorld. Hypersnap is primary; the Snapchain (crackle)
+ * answer is consulted on a clean Hypersnap miss or a Hypersnap outage.
+ * Unlike the cast legs, the crackle client conflates outage with miss
+ * (getHubUserByFid answers undefined for both — pre-existing behavior),
+ * so a crackle failure cannot upgrade to a throw here: the caller sees
+ * undefined, the user cache stays unwritten, and the next call retries.
+ */
+export const getUserInEitherWorld = async (
+	fid: number,
+): Promise<User | undefined> => {
+	try {
+		const haatzUser = await getHaatzUserByFid(fid);
+		if (haatzUser) return haatzUser;
+	} catch (error) {
+		console.error(
+			"getUserInEitherWorld: haatz gateway unavailable, falling back to snapchain:",
+			fid,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+	}
+
+	return getHubUserByFid(fid);
+};
+
 export const getUsernameByFid = async (
 	fid: number,
 ): Promise<string | undefined> => {
-	const user = await getHubUserByFid(fid);
+	const user = await getUserInEitherWorld(fid);
 	// Hub preferred name (USER_DATA_TYPE_USERNAME). A missing message is
 	// null on the user and undefined here, which /u reports as missing.
 	return user?.username ?? undefined;
