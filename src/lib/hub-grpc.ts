@@ -2,6 +2,7 @@ import {
 	getInsecureHubRpcClient,
 	type HubEvent,
 	HubEventType,
+	type Message,
 	MessageType,
 } from "@farcaster/hub-nodejs";
 import { sift } from "radash";
@@ -235,11 +236,13 @@ export const getCastById = async (
 // Walk hub pages until `maxMessages` or the hub runs dry. pageSize is the
 // RPC page, not the caller's cap. An empty page ends the walk even when a
 // token is attached — a non-advancing token would otherwise spin to the cap.
-export const collectPagedMessages = async <T>(
+// Token type is generic (Uint8Array for gRPC pages, string for the haatz
+// /v1 gateway); both carry a length and both use an empty token as "end".
+export const collectPagedMessages = async <T, Token extends { length: number }>(
 	fetchPage: (request: {
-		pageToken?: Uint8Array;
+		pageToken?: Token;
 		pageSize: number;
-	}) => Promise<{ messages: T[]; nextPageToken?: Uint8Array }>,
+	}) => Promise<{ messages: T[]; nextPageToken?: Token }>,
 	maxMessages: number,
 	pageSize: number,
 ): Promise<T[]> => {
@@ -248,7 +251,7 @@ export const collectPagedMessages = async <T>(
 	}
 
 	const collected: T[] = [];
-	let pageToken: Uint8Array | undefined;
+	let pageToken: Token | undefined;
 
 	while (collected.length < maxMessages) {
 		const requestSize = Math.min(pageSize, maxMessages - collected.length);
@@ -298,7 +301,7 @@ export const getCastsByFid = async (
 			sinceTimestamp !== undefined ? sinceTimestamp - FARCASTER_EPOCH : undefined;
 		const messageCap = Math.min(Math.max(0, maxMessages), MAX_SYNC_MESSAGES);
 
-		const unsafeMessages = await collectPagedMessages(
+		const unsafeMessages = await collectPagedMessages<Message, Uint8Array>(
 			async ({ pageToken, pageSize }) => {
 				const castsRpcResponse = await withDeadline(
 					client.getAllCastMessagesByFid({
@@ -351,12 +354,16 @@ export const getCastsByFid = async (
 
 		return { casts, numNew };
 	} catch (error) {
+		// rethrow, never swallow: under the fork, an outage that reads as
+		// "this world has nothing" would let a caller treat snap-only
+		// fids as empty and advance watermarks past nothing. Callers
+		// (cast-sync) decide what a failed leg means.
 		console.error(
 			"Error fetching casts by fid:",
 			fid,
 			error instanceof Error ? error.message : JSON.stringify(error),
 		);
-		return { casts: [], numNew: 0 };
+		throw error;
 	}
 };
 
@@ -410,11 +417,12 @@ export const rawChannelFeed = async (
 
 		return { casts, numNew };
 	} catch (error) {
+		// same contract as getCastsByFid — rethrow, callers decide
 		console.error(
 			"Error fetching casts by parentUrl:",
 			parentUrl,
 			error instanceof Error ? error.message : JSON.stringify(error),
 		);
-		return { casts: [], numNew: 0 };
+		throw error;
 	}
 };

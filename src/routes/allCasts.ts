@@ -1,11 +1,11 @@
 import { Elysia, t } from "elysia";
 import { getHubFidByUsername } from "../lib/hub-api";
-import { getCastsByFid } from "../lib/hub-grpc";
+import { syncCastsByFid } from "../lib/cast-sync";
 import { CastSchema } from "../types";
 
 export const getAllCastsAndRepliesByUsername = new Elysia().get(
 	"/:username/casts-and-replies",
-	async ({ params: { username }, query: { limit } }) => {
+	async ({ params: { username }, query: { limit }, set }) => {
 		const fid = await getHubFidByUsername(username);
 
 		if (!fid) {
@@ -15,7 +15,20 @@ export const getAllCastsAndRepliesByUsername = new Elysia().get(
 			};
 		}
 
-		const { casts } = await getCastsByFid(fid, limit);
+		let casts;
+		try {
+			({ casts } = await syncCastsByFid(fid, limit));
+		} catch (error) {
+			console.error(
+				"casts-and-replies: cast sync outage:",
+				error instanceof Error ? error.message : JSON.stringify(error),
+			);
+			set.status = 503;
+			return {
+				success: false,
+				error: "casts-and-replies: cast sync outage",
+			};
+		}
 
 		return {
 			success: true,

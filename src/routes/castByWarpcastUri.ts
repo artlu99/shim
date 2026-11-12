@@ -1,7 +1,8 @@
 import { Elysia, t } from "elysia";
 import { URI_SEARCH_LOOKBACK } from "../constants";
+import { getCastInEitherWorld } from "../lib/cast-lookup";
+import { syncCastsByFid } from "../lib/cast-sync";
 import { getHubFidByUsername } from "../lib/hub-api";
-import { getCastById, getCastsByFid } from "../lib/hub-grpc";
 import { getUserByFid } from "../lib/hydration";
 import { getCastByShortHash } from "../lib/sqlite";
 import { getChannel, getChannelIdFromUrl } from "../lib/warpcast";
@@ -9,7 +10,7 @@ import { type Cast, CastSchema } from "../types";
 
 export const getCastByWarpcastUri = new Elysia().get(
 	"/wc/:username/:shortHash",
-	async ({ params: { username, shortHash } }) => {
+	async ({ params: { username, shortHash }, set }) => {
 		const fid = await getHubFidByUsername(username);
 		if (!fid) {
 			return {
@@ -21,9 +22,42 @@ export const getCastByWarpcastUri = new Elysia().get(
 		let cast: Cast | undefined;
 		const castDbObj = await getCastByShortHash(shortHash);
 		if (castDbObj) {
-			cast = await getCastById(fid, castDbObj.hash as `0x${string}`);
+			// fork-aware: a warm row whose cast lives only in the Hypersnap
+			// world is still valid
+			try {
+				const result = await getCastInEitherWorld(
+					fid,
+					castDbObj.hash as `0x${string}`,
+				);
+				cast = result?.cast;
+			} catch (error) {
+				console.error(
+					"getCastFromUri: cast lookup outage:",
+					error instanceof Error ? error.message : JSON.stringify(error),
+				);
+				set.status = 503;
+				return {
+					success: false,
+					error: "getCastFromUri: cast lookup outage",
+				};
+			}
 		} else {
-			const { casts } = await getCastsByFid(fid, URI_SEARCH_LOOKBACK);
+			// the lookback walk must search the fid's casts in BOTH worlds —
+			// the cast behind a Warpcast URI may only exist in either one
+			let casts: Cast[];
+			try {
+				({ casts } = await syncCastsByFid(fid, URI_SEARCH_LOOKBACK));
+			} catch (error) {
+				console.error(
+					"getCastFromUri: cast sync outage:",
+					error instanceof Error ? error.message : JSON.stringify(error),
+				);
+				set.status = 503;
+				return {
+					success: false,
+					error: "getCastFromUri: cast sync outage",
+				};
+			}
 			if (!casts) {
 				console.error(
 					`getCastFromUri: No casts found for username: ${username}`,

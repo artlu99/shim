@@ -7,26 +7,43 @@ import {
 	REFRESH_PARALLEL_BATCHES,
 } from "../constants";
 import { getFollowingByFid, getHubFidByUsername } from "../lib/hub-api";
-import { getCastsByFid } from "../lib/hub-grpc";
+import { syncCastsByFid } from "../lib/cast-sync";
 import { getLatestCastTimestamps } from "../lib/sqlite";
 
 export const processFids = async (allFids: number[]) => {
 	// incremental: users we already have casts for only pull new messages
-	// from the hub (server-side startTimestamp filter); unknown users sync
-	// up to MAX_SYNC_MESSAGES. This is the only writer — a bounded read that
+	// (server-side startTimestamp filter); unknown users sync up to
+	// MAX_SYNC_MESSAGES. This is the only writer — a bounded read that
 	// upserts the newest casts seals the watermark, and this path never
-	// walks back behind it.
+	// walks back behind it. Sync is fork-aware: Hypersnap /v1 primary,
+	// Snapchain gRPC on a clean miss.
 	const watermarks = await getLatestCastTimestamps(allFids);
 
-	// Process FIDs in parallel batches of REFRESH_PARALLEL_BATCHES (20)
+	// Process FIDs in parallel batches of REFRESH_PARALLEL_BATCHES (20).
+	// A fid where BOTH worlds are unreachable is counted, not silently
+	// treated as an empty world — the stats carry the failure.
+	let failedFids = 0;
 	const results = [];
 	for (const batch of cluster(allFids, REFRESH_PARALLEL_BATCHES)) {
 		const batchResults = await Promise.all(
-			batch.map(async (fid: number) =>
-				getCastsByFid(fid, MAX_SYNC_MESSAGES, watermarks.get(fid), {
-					upsert: true,
-				}),
-			),
+			batch.map(async (fid: number) => {
+				try {
+					return await syncCastsByFid(
+						fid,
+						MAX_SYNC_MESSAGES,
+						watermarks.get(fid),
+						{ upsert: true },
+					);
+				} catch (error) {
+					failedFids += 1;
+					console.error(
+						"processFids: cast sync outage:",
+						fid,
+						error instanceof Error ? error.message : JSON.stringify(error),
+					);
+					return { casts: [], numNew: 0 };
+				}
+			}),
 		);
 		results.push(...batchResults);
 	}
@@ -47,6 +64,7 @@ export const processFids = async (allFids: number[]) => {
 			totalFids: allFids.length,
 			totalNewCasts: totalNewCasts,
 			totalCasts: totalCount,
+			failedFids,
 		},
 	};
 };
@@ -105,6 +123,7 @@ export const postRefresh = new Elysia().post(
 									totalFids: t.Number(),
 									totalNewCasts: t.Number(),
 									totalCasts: t.Number(),
+									failedFids: t.Number(),
 								}),
 							}),
 						},

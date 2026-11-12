@@ -1,11 +1,7 @@
+import "./../helpers/hub-env";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import * as hubGrpc from "../../lib/hub-grpc";
 import * as hypersnap from "../../lib/hypersnap";
-
-// cast-lookup imports hub-grpc, which throws at import time without
-// HUB_GRPC_ENDPOINT. HUB_GRPC_DISABLED=1 selects the no-client path.
-process.env.HUB_GRPC_ENDPOINT ??= "grpc://localhost:2283";
-process.env.HUB_GRPC_DISABLED = "1";
 
 const { getCastInEitherWorld } = await import("../../lib/cast-lookup");
 

@@ -44,3 +44,13 @@ export const HTTP_FAN_OUT_BATCH_SIZE = 20;
 export const HYPERSNAP_API_ENDPOINT =
 	process.env.HYPERSNAP_API_ENDPOINT || "https://haatz.quilibrium.com";
 export const HYPERSNAP_TIMEOUT_MS = 10_000;
+
+// The same haatz node also serves the snapchain /v1 HTTP JSON gateway (the
+// crackle.farcaster.xyz:3381 surface) proxied on 443. The gRPC and raw
+// gateway ports (2283, 3381-3383) sit behind a proxy front that only
+// forwards web ports, so corpus sync travels over HTTPS /v1 — castsByFid
+// (adds AND removes), castsByParent, startTimestamp all match the gRPC
+// semantics (live-verified 2026-11-12).
+export const HAATZ_GATEWAY_ENDPOINT =
+	process.env.HAATZ_GATEWAY_ENDPOINT || "https://haatz.quilibrium.com";
+export const HAATZ_GATEWAY_TIMEOUT_MS = 10_000;

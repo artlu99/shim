@@ -1,7 +1,8 @@
 import { Elysia, t } from "elysia";
 import { sift } from "radash";
 import { FEED_DEFAULT_PAGE_SIZE, HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
-import { getCastById, rawChannelFeed } from "../lib/hub-grpc";
+import { getCastInEitherWorld } from "../lib/cast-lookup";
+import { syncChannelFeed } from "../lib/cast-sync";
 import {
 	getSentFromBySignerKey,
 	getUserByFid,
@@ -42,7 +43,10 @@ async function fetchAndHydrateFeed(
 ): Promise<HydratedCast[]> {
 	const bannedUsers = await getChannelBannedUsers(channelId);
 	const bannedUserFids = bannedUsers.map((bu) => bu.fid);
-	const { casts } = await rawChannelFeed(channelUrl, limit);
+	// fork-aware: Hypersnap /v1 primary, Snapchain gRPC on a clean miss.
+	// Both legs rethrow, so a total outage fails the feed loudly instead
+	// of answering "the channel is empty".
+	const { casts } = await syncChannelFeed(channelUrl, limit);
 
 	const filteredCasts = casts.filter(
 		(cast) => !bannedUserFids.includes(cast.fid),
@@ -71,10 +75,27 @@ export const postReverseChronFeed = new Elysia().post(
 			await mapBatch(
 				feedIdentifiers,
 				async (fi) => {
-					const cast = await getCastById(
-						fi.fid,
-						`0x${fi.hash.replace("0x", "")}`,
-					);
+					// fork-aware per-item resolution: a corpus row whose cast
+					// lives only in the Hypersnap world used to be silently
+					// dropped here by a Snapchain-only getCastById. An outage
+					// skips the item (a gap, logged) rather than failing the
+					// whole feed — a feed is not a validity verdict.
+					let cast;
+					try {
+						const result = await getCastInEitherWorld(
+							fi.fid,
+							`0x${fi.hash.replace("0x", "")}`,
+						);
+						cast = result?.cast;
+					} catch (error) {
+						console.error(
+							"reverse-chron: item lookup outage, skipping:",
+							fi.fid,
+							fi.hash,
+							error instanceof Error ? error.message : JSON.stringify(error),
+						);
+						return undefined;
+					}
 					if (!cast) {
 						return undefined;
 					}

@@ -1,9 +1,5 @@
+import "./../helpers/hub-env";
 import { beforeAll, describe, expect, it } from "bun:test";
-
-// hub-grpc throws at import time without HUB_GRPC_ENDPOINT. HUB_GRPC_DISABLED=1
-// selects the no-client path so this file does not dial a hub.
-process.env.HUB_GRPC_ENDPOINT ??= "grpc://localhost:2283";
-process.env.HUB_GRPC_DISABLED = "1";
 
 type PageRequest = { pageToken?: Uint8Array; pageSize: number };
 type ScriptedPage = { messages: number[]; next?: number | "empty" };
