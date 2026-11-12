@@ -18,6 +18,9 @@ export const REACTIONS_DEFAULT_PAGE_SIZE = 250;
 
 // refresh endpoint
 export const MAX_FOLLOWERS = 100;
+// /refresh body fids array is clamped to this by t.Array maxItems — an
+// unauthenticated caller must not drive unbounded hub/gRPC work
+export const MAX_REFRESH_FIDS = 100;
 export const REFRESH_PARALLEL_BATCHES = 20;
 
 // getCastsByFid walks pages of CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE until the

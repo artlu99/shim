@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { cluster } from "radash";
 import {
 	MAX_FOLLOWERS,
+	MAX_REFRESH_FIDS,
 	MAX_SYNC_MESSAGES,
 	REFRESH_PARALLEL_BATCHES,
 } from "../constants";
@@ -87,7 +88,7 @@ export const postRefresh = new Elysia().post(
 	{
 		body: t.Object({
 			username: t.Optional(t.String()),
-			fids: t.Optional(t.Array(t.Number())),
+			fids: t.Optional(t.Array(t.Number(), { maxItems: MAX_REFRESH_FIDS })),
 		}),
 		detail: {
 			tags: ["Feed"],

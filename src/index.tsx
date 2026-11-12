@@ -59,18 +59,6 @@ const app = new Elysia()
 			},
 		}),
 	)
-	.get(
-		"/stop",
-		({
-			store: {
-				cron: { heartbeat },
-			},
-		}) => {
-			heartbeat.stop();
-
-			return "Stop heartbeat";
-		},
-	)
 	.use(html())
 	.get(
 		"/",
