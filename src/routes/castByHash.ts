@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { getCastById } from "../lib/hub-grpc";
+import { getCastInEitherWorld } from "../lib/cast-lookup";
 import { getHypersnapCastByHash } from "../lib/hypersnap";
 import { getUserByFid } from "../lib/hydration";
 import { getCastByShortHash, upsertCasts } from "../lib/sqlite";
@@ -10,20 +10,30 @@ import { type Cast, CastSchema } from "../types";
 /*
 	/h answers cast lookups that carry only a hash — no fid, no username.
 
+	Snapchain and Hypersnap are forked: a message on one is not guaranteed
+	on the other, so no single network's miss decides existence. A hash on
+	either world is valid.
+
 	Resolution order:
 	1. Local index (SQLite prefix match). Warm hashes answer from here, and
 	   it is the only short-hash resolver anywhere: the hub requires fid +
-	   hash, and no network API accepts a short hash.
-	2. Local miss with a full hash → the network's hash-only index
-	   (Hypersnap /v2/farcaster/cast?type=hash). The node indexes the chain,
-	   so its miss is authoritative: success/failure reflects existence in
-	   the world, not the local corpus. A transport failure answers 503 —
-	   an outage, never a verdict.
+	   hash, and no network API accepts a short hash. With the fid the
+	   lookup continues through the fork-aware primitive: Hypersnap is
+	   primary, Snapchain is consulted only on a Hypersnap miss — a miss
+	   on one is not a verdict.
+	2. Local miss with a full hash → Hypersnap's hash-only index
+	   (/v2/farcaster/cast?type=hash), the only hash-only source anywhere
+	   and the primary world. Its 404 is authoritative for its world, but
+	   Snapchain is keyed fid + hash everywhere, so a cold Snapchain-world
+	   hash has no hash-only source and is unresolvable here; /i (with the
+	   fid) reaches it, and the local corpus growing behind replies shrinks
+	   the residual. A transport failure answers 503 — an outage, never a
+	   verdict.
 
-	On a network hit the fid becomes known: the canonical cast is fetched
-	from the hub (mention positions, signer — the client-API shape is only
-	a fallback), the caller is answered first, and an author refresh runs
-	fire-and-forget so the local corpus grows behind the reply.
+	On a cold network hit the fid becomes known: the caller is answered
+	from the hash-only index (the primary world — no second network hop
+	while it is answering), and an author refresh runs fire-and-forget so
+	the local corpus grows behind the reply.
 */
 
 // 0x + 40 hex chars. Short hashes cannot traverse the network path.
@@ -57,6 +67,22 @@ const hydrateChannel = async (cast: Cast) => {
 	return channelId ? await getChannel(channelId) : undefined;
 };
 
+const outage = (
+	set: { status?: number | string },
+	where: string,
+	error: unknown,
+) => {
+	console.error(
+		`${where}: cast lookup outage:`,
+		error instanceof Error ? error.message : JSON.stringify(error),
+	);
+	set.status = 503;
+	return {
+		success: false,
+		error: `${where}: cast lookup outage`,
+	};
+};
+
 export const getCastByHash = new Elysia().get(
 	"/h/:castHash",
 	async ({ params: { castHash }, set }) => {
@@ -69,19 +95,24 @@ export const getCastByHash = new Elysia().get(
 		if (castDbObj) {
 			const { fid } = castDbObj;
 
-			// user and cast only need fid+hash, so fetch them concurrently
-			const [user, cast] = await Promise.all([
-				getUserByFid(fid),
-				getCastById(fid, hash),
-			]);
-			// if the cast has been deleted, it will no longer be on Snapchain
-			if (!cast) {
+			// the fork-aware verdict: Snapchain miss is not a miss while
+			// Hypersnap is unchecked — a miss here means both worlds
+			// answered not_found (deleted on both, or never existed)
+			let result;
+			try {
+				result = await getCastInEitherWorld(fid, hash);
+			} catch (error) {
+				return outage(set, "getCastByHash", error);
+			}
+			if (!result) {
 				return {
 					success: false,
-					error: "getCastById: Cast not found",
+					error: "getCastByHash: Cast not found",
 				};
 			}
 
+			const { cast } = result;
+			const user = await getUserByFid(fid);
 			const channel = await hydrateChannel(cast);
 
 			return {
@@ -102,6 +133,9 @@ export const getCastByHash = new Elysia().get(
 		try {
 			const found = await getHypersnapCastByHash(hash);
 			if (!found) {
+				// authoritative for Hypersnap's world. A Snapchain-world
+				// hash absent from the local corpus is unresolvable by
+				// hash alone — see the header comment.
 				return {
 					success: false,
 					error: "getCastByHash: Cast not found",
@@ -109,26 +143,17 @@ export const getCastByHash = new Elysia().get(
 			}
 			seeded = found;
 		} catch (error) {
-			console.error(
-				"getCastByHash: hash-only index unavailable:",
-				error instanceof Error ? error.message : JSON.stringify(error),
-			);
-			set.status = 503;
-			return {
-				success: false,
-				error: "getCastByHash: hash-only index unavailable",
-			};
+			return outage(set, "getCastByHash: hash-only index", error);
 		}
 
 		const fid = seeded.fid;
 
-		// priority one: answer the caller. The hub serves the canonical
-		// cast — the hash-only index only had to contribute the fid.
-		const [user, hubCast] = await Promise.all([
-			getUserByFid(fid),
-			getCastById(fid, hash),
-		]);
-		const cast = hubCast ?? seeded;
+		// priority one: answer the caller. Hypersnap is primary and the
+		// hash-only index already answered — no second network hop while
+		// it is answering. The seeded cast is the client-API shape
+		// (lossy: no signer, no raw mention placeholders).
+		const user = await getUserByFid(fid);
+		const cast = seeded;
 
 		// index this hash so the next lookup for it is a local hit. The
 		// seed row can sit above a cold fid's backfill frontier (the walk
@@ -164,10 +189,11 @@ export const getCastByHash = new Elysia().get(
 			summary: "Get cast by hash",
 			description:
 				"Resolves warm hashes from the local index and cold full hashes " +
-				"against the network's hash-only index, so success/failure " +
-				"reflects existence in the world rather than the local corpus. " +
-				"Short hashes resolve only from the local index. An upstream " +
-				"outage answers 503, not a false miss.",
+				"against the network's hash-only index. Snapchain and Hypersnap " +
+				"are forked, so a hash on either world is valid: a miss on one " +
+				"network is not a verdict while the other is unchecked. Short " +
+				"hashes resolve only from the local index. An upstream outage " +
+				"answers 503, not a false miss.",
 			responses: {
 				200: {
 					description: "Returns cast by hash",
@@ -182,7 +208,7 @@ export const getCastByHash = new Elysia().get(
 				},
 				503: {
 					description:
-						"The hash-only index is unreachable — an outage, not a miss",
+						"A cast world is unreachable without answering — an outage, not a miss",
 				},
 			},
 		},

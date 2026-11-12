@@ -156,6 +156,29 @@ const getCastFromAddMessage = async (
 	return undefined;
 };
 
+/**
+ * Is this error the hub's clean "the key (fid, hash) does not exist here"
+ * answer, as opposed to a transport failure, deadline, or malformed
+ * reply? A clean not_found is a verdict about the answering network only
+ * — under the Snapchain/Hypersnap fork, callers must consult the other
+ * world before treating it as "this cast does not exist".
+ */
+export const isHubNotFound = (error: unknown): boolean => {
+	const errCode = (error as { errCode?: unknown } | null)?.errCode;
+	if (typeof errCode === "string") return errCode === "not_found";
+	// some paths surface the error already stringified; match the code
+	return /not_found|not found/i.test(String(error));
+};
+
+/**
+ * The cast as canonical Snapchain holds it, or undefined on a clean
+ * not_found — which under the fork means "not in Snapchain's world",
+ * not "deleted" and not "invalid". Any other failure throws: an outage
+ * must never read as a miss, because "not on Snapchain" is only half
+ * the validity question. Cast-removes also come back undefined here
+ * (the message exists but carries no castAddBody) — a removed cast is
+ * gone from Snapchain's world even if a fork peer still has it.
+ */
 export const getCastById = async (
 	fid: number,
 	hash: `0x${string}`,
@@ -163,40 +186,50 @@ export const getCastById = async (
 	if (!client) {
 		return undefined;
 	}
+	const cacheClient = redis();
+	const cacheKey = `grpc:${fid}:${hash}`;
+
+	let cacheResponse: unknown;
 	try {
-		const cacheClient = redis();
-		const cacheKey = `grpc:${fid}:${hash}`;
-
-		const cacheResponse = await cacheClient.get(cacheKey);
-
-		if (cacheResponse) {
-			return cacheResponse as Cast;
-		}
-
-		const cast = await withDeadline(client.getCast({ fid, hash: hexToUint8Array(hash) }));
-
-		if (!cast.isOk()) {
-			console.log("throw!");
-			throw new Error(cast._unsafeUnwrapErr().toString());
-		}
-
-		const unsafe = cast._unsafeUnwrap();
-		if (unsafe.data?.castAddBody) {
-			const res = await getCastFromAddMessage(unsafe as CastAddMessage);
-
-			await cacheClient.set(cacheKey, JSON.stringify(res), { ex: Ttl.LONG });
-
-			return res;
-		}
+		cacheResponse = await cacheClient.get(cacheKey);
 	} catch (error) {
 		console.error(
-			"Error fetching cast by fid and hash:",
+			"Error reading cast cache:",
 			fid,
 			hash,
 			error instanceof Error ? error.message : JSON.stringify(error),
 		);
-		return undefined;
 	}
+
+	if (cacheResponse) {
+		return cacheResponse as Cast;
+	}
+
+	const cast = await withDeadline(client.getCast({ fid, hash: hexToUint8Array(hash) }));
+
+	if (!cast.isOk()) {
+		const err = cast._unsafeUnwrapErr();
+		if (isHubNotFound(err)) {
+			return undefined;
+		}
+		console.error(
+			"Error fetching cast by fid and hash:",
+			fid,
+			hash,
+			err.toString(),
+		);
+		throw new Error(err.toString());
+	}
+
+	const unsafe = cast._unsafeUnwrap();
+	if (unsafe.data?.castAddBody) {
+		const res = await getCastFromAddMessage(unsafe as CastAddMessage);
+
+		await cacheClient.set(cacheKey, JSON.stringify(res), { ex: Ttl.LONG });
+
+		return res;
+	}
+	return undefined;
 };
 
 // Walk hub pages until `maxMessages` or the hub runs dry. pageSize is the

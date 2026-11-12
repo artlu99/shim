@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+	getHypersnapCastByFidAndHash,
 	getHypersnapCastByHash,
 	hypersnapCastToCast,
 } from "../../lib/hypersnap";
@@ -122,5 +123,51 @@ describe("getHypersnapCastByHash", () => {
 		expect(getHypersnapCastByHash(HASH as `0x${string}`)).rejects.toThrow(
 			/different cast/,
 		);
+	});
+});
+
+describe("getHypersnapCastByFidAndHash", () => {
+	const HASH = "0xa7c5f47033da848d6d16dac11c61838634a50c23";
+
+	// FIXTURE's author is fid 3854
+	test("returns the cast when the author fid matches", async () => {
+		globalThis.fetch = Object.assign(async () =>
+			Response.json({ cast: FIXTURE }, { status: 200 }),
+		) as unknown as typeof fetch;
+		const cast = await getHypersnapCastByFidAndHash(
+			3854,
+			HASH as `0x${string}`,
+		);
+		expect(cast?.fid).toBe(3854);
+	});
+
+	// the hash-only index is globally keyed: a hit naming another author
+	// means the hash belongs to a different fid's cast — a miss, not an error
+	test("a hit naming a different author is a clean miss", async () => {
+		globalThis.fetch = Object.assign(async () =>
+			Response.json({ cast: FIXTURE }, { status: 200 }),
+		) as unknown as typeof fetch;
+		const cast = await getHypersnapCastByFidAndHash(2, HASH as `0x${string}`);
+		expect(cast).toBeUndefined();
+	});
+
+	test("a 404 stays a clean miss", async () => {
+		globalThis.fetch = Object.assign(async () =>
+			Response.json({ error: "not found" }, { status: 404 }),
+		) as unknown as typeof fetch;
+		const cast = await getHypersnapCastByFidAndHash(
+			3854,
+			HASH as `0x${string}`,
+		);
+		expect(cast).toBeUndefined();
+	});
+
+	test("an outage propagates to the caller", async () => {
+		globalThis.fetch = Object.assign(async () => {
+			throw new Error("connect ECONNREFUSED");
+		}) as unknown as typeof fetch;
+		expect(
+			getHypersnapCastByFidAndHash(3854, HASH as `0x${string}`),
+		).rejects.toThrow();
 	});
 });

@@ -9,6 +9,7 @@ type PageRequest = { pageToken?: Uint8Array; pageSize: number };
 type ScriptedPage = { messages: number[]; next?: number | "empty" };
 
 let collectPagedMessages: typeof import("../../lib/hub-grpc").collectPagedMessages;
+let isHubNotFound: typeof import("../../lib/hub-grpc").isHubNotFound;
 
 const script = (pages: ScriptedPage[]) => {
 	const calls: PageRequest[] = [];
@@ -30,6 +31,29 @@ const script = (pages: ScriptedPage[]) => {
 	};
 	return { fetchPage, calls };
 };
+
+describe("isHubNotFound", () => {
+	beforeAll(async () => {
+		({ isHubNotFound } = await import("../../lib/hub-grpc"));
+	});
+
+	it("matches the errCode exactly", () => {
+		expect(isHubNotFound({ errCode: "not_found" })).toBe(true);
+		expect(isHubNotFound({ errCode: "unavailable" })).toBe(false);
+		expect(isHubNotFound({ errCode: "bad_request" })).toBe(false);
+	});
+
+	it("matches a stringified HubError", () => {
+		expect(isHubNotFound("HubError: not_found: cast not found")).toBe(true);
+		expect(isHubNotFound(new Error("connect ECONNREFUSED"))).toBe(false);
+	});
+
+	it("is false for junk", () => {
+		expect(isHubNotFound(undefined)).toBe(false);
+		expect(isHubNotFound(null)).toBe(false);
+		expect(isHubNotFound(42)).toBe(false);
+	});
+});
 
 describe("collectPagedMessages", () => {
 	beforeAll(async () => {

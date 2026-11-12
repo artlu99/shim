@@ -132,3 +132,20 @@ export const getHypersnapCastByHash = async (
 	}
 	return cast;
 };
+
+/**
+ * Resolve by fid + full hash against the node's hash-only index — the
+ * Hypersnap-world leg of the fork-aware lookup. The index is globally
+ * keyed by hash, so a hit naming a different author means the hash
+ * belongs to another fid's cast: a clean miss for this lookup, not an
+ * error. Propagates getHypersnapCastByHash's contract — undefined on an
+ * authoritative 404, throw on outage or malformed answer.
+ */
+export const getHypersnapCastByFidAndHash = async (
+	fid: number,
+	rawHash: `0x${string}`,
+): Promise<Cast | undefined> => {
+	const cast = await getHypersnapCastByHash(rawHash);
+	if (!cast) return undefined;
+	return cast.fid === fid ? cast : undefined;
+};
