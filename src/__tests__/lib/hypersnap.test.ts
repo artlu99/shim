@@ -79,6 +79,97 @@ describe("hypersnapCastToCast", () => {
 		).toBeUndefined();
 		expect(hypersnapCastToCast(null)).toBeUndefined();
 	});
+
+	// Haatz sometimes leaves a zero-width range at the bang and the
+	// username out of the text — splice @username in at that byte.
+	test("splices a zero-width mention range into text", () => {
+		const text = "from !";
+		const bang = new TextEncoder().encode(text).indexOf("!".charCodeAt(0));
+		const cast = hypersnapCastToCast({
+			...FIXTURE,
+			text,
+			mentioned_profiles: [{ fid: 230238, username: "mvr" }],
+			mentioned_profiles_ranges: [{ start: bang, end: bang }],
+		});
+		expect(cast!.text).toBe("from @mvr!");
+		expect(cast!.mentions).toEqual([230238]);
+		expect(cast!.mentionsPositions).toEqual([bang]);
+		expect(cast!.rawText).toBeNull();
+	});
+
+	// apply from the end so the earlier byte offset stays valid after
+	// the later insertion grows the buffer
+	test("applies multiple mention ranges from the end", () => {
+		const text = "a!b!";
+		const bytes = new TextEncoder().encode(text);
+		const first = bytes.indexOf("!".charCodeAt(0));
+		const second = bytes.indexOf("!".charCodeAt(0), first + 1);
+		const cast = hypersnapCastToCast({
+			...FIXTURE,
+			text,
+			mentioned_profiles: [
+				{ fid: 1, username: "first" },
+				{ fid: 2, username: "second" },
+			],
+			mentioned_profiles_ranges: [
+				{ start: first, end: first },
+				{ start: second, end: second },
+			],
+		});
+		expect(cast!.text).toBe("a@first!b@second!");
+		expect(cast!.mentions).toEqual([1, 2]);
+		expect(cast!.mentionsPositions).toEqual([first, second]);
+	});
+
+	// the sort must not depend on the API listing ranges in text order —
+	// positions stay in profile order even when ranges arrive back-to-front
+	test("splices correctly when ranges arrive out of text order", () => {
+		const text = "a!b!";
+		const bytes = new TextEncoder().encode(text);
+		const first = bytes.indexOf("!".charCodeAt(0));
+		const second = bytes.indexOf("!".charCodeAt(0), first + 1);
+		const cast = hypersnapCastToCast({
+			...FIXTURE,
+			text,
+			mentioned_profiles: [
+				{ fid: 1, username: "first" },
+				{ fid: 2, username: "second" },
+			],
+			mentioned_profiles_ranges: [
+				{ start: second, end: second },
+				{ start: first, end: first },
+			],
+		});
+		expect(cast!.text).toBe("a@second!b@first!");
+		expect(cast!.mentions).toEqual([1, 2]);
+		expect(cast!.mentionsPositions).toEqual([second, first]);
+	});
+
+	test("a missing username splices @<unknown>", () => {
+		const text = "hi !";
+		const bang = new TextEncoder().encode(text).indexOf("!".charCodeAt(0));
+		const cast = hypersnapCastToCast({
+			...FIXTURE,
+			text,
+			mentioned_profiles: [{ fid: 9 }],
+			mentioned_profiles_ranges: [{ start: bang, end: bang }],
+		});
+		expect(cast!.text).toBe("hi @<unknown>!");
+		expect(cast!.mentionsPositions).toEqual([bang]);
+	});
+
+	test("an out-of-range mention range leaves the text untouched", () => {
+		const text = "no splice";
+		const cast = hypersnapCastToCast({
+			...FIXTURE,
+			text,
+			mentioned_profiles: [{ fid: 230238, username: "mvr" }],
+			mentioned_profiles_ranges: [{ start: 999, end: 999 }],
+		});
+		expect(cast!.text).toBe("no splice");
+		expect(cast!.mentions).toEqual([230238]);
+		expect(cast!.mentionsPositions).toEqual([]);
+	});
 });
 
 describe("getHypersnapCastByHash", () => {

@@ -20,12 +20,23 @@ interface HypersnapEmbed {
 	cast_id?: { fid?: number; hash?: string };
 }
 
+interface HypersnapMentionProfile {
+	fid?: number;
+	username?: string;
+}
+
+interface HypersnapMentionRange {
+	start?: number;
+	end?: number;
+}
+
 interface HypersnapCast {
 	hash?: string;
 	text?: string;
 	timestamp?: string;
 	embeds?: HypersnapEmbed[];
-	mentioned_profiles?: Array<{ fid?: number }>;
+	mentioned_profiles?: HypersnapMentionProfile[];
+	mentioned_profiles_ranges?: HypersnapMentionRange[];
 	parent_hash?: string;
 	parent_url?: string | null;
 	parent_author?: { fid?: number | null };
@@ -36,12 +47,68 @@ const with0x = (hash: string): `0x${string}` =>
 	`0x${hash.replace(/^0x/, "").toLowerCase()}`;
 
 /**
+ * Splice @username into UTF-8 text at each mentioned_profiles_ranges entry.
+ * Offsets are byte indexes (same as protocol mentionsPositions). Pair
+ * profile i with range i; replace the [start, end) byte span. A
+ * zero-width range inserts without consuming. Apply highest offset first
+ * so earlier offsets stay valid regardless of the order the API lists
+ * ranges in. Invalid or out-of-bounds ranges are skipped.
+ */
+const spliceMentionUsernames = (
+	text: string,
+	profiles: HypersnapMentionProfile[],
+	ranges: HypersnapMentionRange[],
+): { text: string; mentionsPositions: number[] } => {
+	const encoder = new TextEncoder();
+	const decoder = new TextDecoder();
+	let bytes = encoder.encode(text);
+	const mentionsPositions: number[] = [];
+	const splices: Array<{ start: number; end: number; handle: string }> = [];
+
+	const pairCount = Math.min(profiles.length, ranges.length);
+	for (let i = 0; i < pairCount; i++) {
+		const start = ranges[i]?.start;
+		const end = ranges[i]?.end;
+		if (typeof start !== "number" || typeof end !== "number") continue;
+		if (!Number.isInteger(start) || !Number.isInteger(end)) continue;
+		if (start < 0 || end < start || end > bytes.length) continue;
+
+		const username = profiles[i]?.username;
+		const handle =
+			typeof username === "string" && username !== ""
+				? username
+				: "<unknown>";
+		mentionsPositions.push(start);
+		splices.push({ start, end, handle });
+	}
+
+	// walk the highest offset first so earlier offsets stay valid — reverse
+	// array order only guaranteed that when the API listed ranges in text order
+	splices.sort((a, b) => b.start - a.start || b.end - a.end);
+	for (let i = 0; i < splices.length; i++) {
+		const { start, end, handle } = splices[i]!;
+		const insertion = encoder.encode(`@${handle}`);
+		const next = new Uint8Array(
+			bytes.length - (end - start) + insertion.length,
+		);
+		next.set(bytes.subarray(0, start), 0);
+		next.set(insertion, start);
+		next.set(bytes.subarray(end), start + insertion.length);
+		bytes = next;
+	}
+
+	return { text: decoder.decode(bytes), mentionsPositions };
+};
+
+/**
  * Map the Warpcast-client-shaped cast to shim's canonical Cast.
  *
  * The shape is lossy versus the protocol: no signer pubkey, no raw
- * mention-placeholder text, and mention positions are not exposed (the
- * client API resolves mentions into display names inline), so positions
- * are empty. Callers should prefer re-fetching the canonical cast from
+ * mention-placeholder text. Haatz sometimes returns text with mentions
+ * already inlined, and sometimes returns unresolved text plus
+ * mentioned_profiles_ranges — in the latter case usernames are spliced
+ * in here at those UTF-8 byte offsets, and mentionsPositions records the
+ * range starts. Callers should prefer re-fetching the canonical cast from
  * the hub once the fid is known — this mapping exists for the fallback
  * answer and for upserting the hash → fid row into SQLite.
  */
@@ -56,12 +123,21 @@ export const hypersnapCastToCast = (raw: unknown): Cast | undefined => {
 		: Number.NaN;
 	if (Number.isNaN(timestamp)) return undefined;
 
+	const profiles = cast.mentioned_profiles ?? [];
+	const ranges = cast.mentioned_profiles_ranges;
+	let text: string | null = cast.text ?? null;
+	let mentionsPositions: number[] = [];
+	if (text != null && ranges != null && ranges.length > 0) {
+		const spliced = spliceMentionUsernames(text, profiles, ranges);
+		text = spliced.text;
+		mentionsPositions = spliced.mentionsPositions;
+	}
+
 	return {
 		fid,
 		hash: with0x(cast.hash),
-		text: cast.text ?? null,
-		// the client API has already resolved mentions into the text —
-		// there is no raw mention-placeholder form to recover
+		text,
+		// no protocol-raw mention-placeholder form is available from this API
 		rawText: null,
 		embeds: (cast.embeds ?? []).map((embed) => ({
 			url: embed.url,
@@ -73,11 +149,10 @@ export const hypersnapCastToCast = (raw: unknown): Cast | undefined => {
 						}
 					: undefined,
 		})),
-		mentions: (cast.mentioned_profiles ?? [])
+		mentions: profiles
 			.map((profile) => profile.fid)
 			.filter((fid): fid is number => typeof fid === "number"),
-		// see above — not exposed by the client-API shape
-		mentionsPositions: [],
+		mentionsPositions,
 		parentCastId:
 			cast.parent_hash && typeof cast.parent_author?.fid === "number"
 				? {
