@@ -1,5 +1,6 @@
 import { HYPERSNAP_API_ENDPOINT, HYPERSNAP_TIMEOUT_MS } from "../constants";
 import type { Cast } from "../types";
+import { asChain, asFormatVersion } from "./cast-fields";
 
 /*
 	Hypersnap (Quilibrium's Snapchain fork) serves a Warpcast-client-shaped
@@ -41,6 +42,10 @@ interface HypersnapCast {
 	parent_url?: string | null;
 	parent_author?: { fid?: number | null };
 	author?: { fid?: number };
+	// Articles: snake_case on the client API. `type` here is cast /
+	// cast-reply, not protocol CastType — do not map it onto Cast.type.
+	format_version?: number;
+	chain?: unknown;
 }
 
 const with0x = (hash: string): `0x${string}` =>
@@ -164,6 +169,9 @@ export const hypersnapCastToCast = (raw: unknown): Cast | undefined => {
 		timestamp,
 		// not exposed by the client API; not stored and not in CastSchema
 		signer: "" as `0x${string}`,
+		// protocol CastType is not on this API (its `type` is cast/cast-reply)
+		formatVersion: asFormatVersion(cast.format_version),
+		chain: asChain(cast.chain),
 	};
 };
 

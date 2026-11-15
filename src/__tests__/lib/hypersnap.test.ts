@@ -55,6 +55,45 @@ describe("hypersnapCastToCast", () => {
 		]);
 		expect(cast!.mentions).toEqual([527487]);
 		expect(cast!.mentionsPositions).toEqual([]);
+		expect(cast!.type).toBeUndefined();
+		expect(cast!.formatVersion).toBeUndefined();
+		expect(cast!.chain).toBeUndefined();
+	});
+
+	test("passes through Articles format_version and chain (not client type)", () => {
+		const cast = hypersnapCastToCast({
+			...FIXTURE,
+			type: "cast", // client shape — must NOT become Cast.type
+			format_version: 1,
+			chain: { index: 0, count: 2 },
+		});
+		expect(cast!.type).toBeUndefined();
+		expect(cast!.formatVersion).toBe(1);
+		expect(cast!.chain).toEqual({ index: 0, count: 2 });
+
+		const segment = hypersnapCastToCast({
+			...FIXTURE,
+			type: "cast-reply",
+			format_version: 1,
+			chain: {
+				root: {
+					fid: 4926,
+					hash: "4e8b2f2bcbaf19689fa3b41aa76671552a922d22",
+				},
+				index: 1,
+				count: 2,
+			},
+		});
+		expect(segment!.type).toBeUndefined();
+		expect(segment!.formatVersion).toBe(1);
+		expect(segment!.chain).toEqual({
+			root: {
+				fid: 4926,
+				hash: "0x4e8b2f2bcbaf19689fa3b41aa76671552a922d22",
+			},
+			index: 1,
+			count: 2,
+		});
 	});
 
 	test("maps a reply's parent_hash onto parentCastId", () => {

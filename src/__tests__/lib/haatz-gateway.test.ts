@@ -88,6 +88,59 @@ describe("gatewayCastToCast", () => {
 		expect(cast?.timestamp).toBe(1609459200 + 184993770);
 		expect(cast?.text).toBe("gm!");
 		expect(cast?.rawText).toBe("gm!");
+		expect(cast?.type).toBe("CAST");
+		expect(cast?.formatVersion).toBeUndefined();
+		expect(cast?.chain).toBeUndefined();
+	});
+
+	test("passes through Articles fields: type, formatVersion, chain", async () => {
+		const articleRoot = {
+			...ADD_MESSAGE,
+			data: {
+				...ADD_MESSAGE.data,
+				castAddBody: {
+					...ADD_MESSAGE.data.castAddBody,
+					type: "LONG_CAST",
+					formatVersion: 1,
+					chain: { index: 0, count: 2 },
+				},
+			},
+		};
+		const root = await gatewayCastToCast(articleRoot);
+		expect(root?.type).toBe("LONG_CAST");
+		expect(root?.formatVersion).toBe(1);
+		expect(root?.chain).toEqual({ index: 0, count: 2 });
+
+		const articleBody = {
+			...ADD_MESSAGE,
+			data: {
+				...ADD_MESSAGE.data,
+				castAddBody: {
+					...ADD_MESSAGE.data.castAddBody,
+					type: "TEN_K_CAST",
+					formatVersion: 1,
+					chain: {
+						root: {
+							fid: 4926,
+							hash: "0x4e8b2f2bcbaf19689fa3b41aa76671552a922d22",
+						},
+						index: 1,
+						count: 2,
+					},
+				},
+			},
+		};
+		const body = await gatewayCastToCast(articleBody);
+		expect(body?.type).toBe("TEN_K_CAST");
+		expect(body?.formatVersion).toBe(1);
+		expect(body?.chain).toEqual({
+			root: {
+				fid: 4926,
+				hash: "0x4e8b2f2bcbaf19689fa3b41aa76671552a922d22",
+			},
+			index: 1,
+			count: 2,
+		});
 	});
 
 	test("preserves mentions and their positions", async () => {

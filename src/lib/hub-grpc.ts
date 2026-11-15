@@ -17,6 +17,7 @@ import {
 } from "../constants";
 import { livenessFids } from "../static/artlu";
 import type { Cast } from "../types";
+import { asCastTypeName, asChain, asFormatVersion } from "./cast-fields";
 import type { CastAddMessage } from "./farcaster-types";
 import { hydrateText } from "./hydration";
 import { upsertCasts } from "./sqlite";
@@ -152,6 +153,9 @@ const getCastFromAddMessage = async (
 			parentUrl: cast.data.castAddBody?.parentUrl,
 			timestamp: FARCASTER_EPOCH + cast.data.timestamp,
 			signer: uin8ArrayToHex(cast.signer),
+			type: asCastTypeName(cast.data.castAddBody.type),
+			formatVersion: asFormatVersion(cast.data.castAddBody.formatVersion),
+			chain: asChain(cast.data.castAddBody.chain),
 		};
 	}
 	return undefined;

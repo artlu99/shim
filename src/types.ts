@@ -1,5 +1,31 @@
 import { t } from "elysia";
 
+// Protocol CastType (CastAddBody.type). Distinct from Hypersnap's client
+// `type` field (cast / cast-reply), which is not this enum.
+export type CastTypeName = "CAST" | "LONG_CAST" | "TEN_K_CAST";
+
+// ChainCast: ordered segments of one author's cast chain (Articles).
+// `root` is absent on index 0; present on later casts.
+export interface ChainCast {
+	root?: {
+		fid: number;
+		hash: `0x${string}`;
+	};
+	index: number;
+	count: number;
+}
+
+const CastIdSchema = t.Object({
+	fid: t.Number(),
+	hash: t.String(),
+});
+
+const ChainCastSchema = t.Object({
+	root: t.Optional(CastIdSchema),
+	index: t.Number(),
+	count: t.Number(),
+});
+
 export const CastSchema = Object({
 	fid: t.Number(),
 	hash: t.String(),
@@ -8,24 +34,25 @@ export const CastSchema = Object({
 	embeds: t.Array(
 		t.Object({
 			url: t.Optional(t.String()),
-			castId: t.Optional(
-				t.Object({
-					fid: t.Number(),
-					hash: t.String(),
-				}),
-			),
+			castId: t.Optional(CastIdSchema),
 		}),
 	),
 	mentions: t.Array(t.Number()),
 	mentionsPositions: t.Array(t.Number()),
-	parentCastId: t.Optional(
-		t.Object({
-			fid: t.Number(),
-			hash: t.String(),
-		}),
-	),
+	parentCastId: t.Optional(CastIdSchema),
 	parentUrl: t.Optional(t.String()),
 	timestamp: t.Number(),
+	// Articles / chained casts (CastAddBody fields). Ordinary casts carry
+	// type "CAST" from gRPC/Haatz (proto3 default) and no chain.
+	type: t.Optional(
+		t.Union([
+			t.Literal("CAST"),
+			t.Literal("LONG_CAST"),
+			t.Literal("TEN_K_CAST"),
+		]),
+	),
+	formatVersion: t.Optional(t.Number()),
+	chain: t.Optional(ChainCastSchema),
 });
 
 export interface Cast {
@@ -49,6 +76,12 @@ export interface Cast {
 	parentUrl?: string;
 	timestamp: number;
 	signer: `0x${string}`;
+	/** Protocol CastType. Absent when the source does not expose it (Hypersnap). */
+	type?: CastTypeName;
+	/** How to read the text: 0 = plain, 1 = article Markdown. */
+	formatVersion?: number;
+	/** Set on every cast that belongs to a chain (e.g. an Article). */
+	chain?: ChainCast;
 }
 
 export interface User {

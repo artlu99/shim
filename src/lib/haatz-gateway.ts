@@ -7,6 +7,7 @@ import {
 	MAX_SYNC_MESSAGES,
 } from "../constants";
 import type { Cast } from "../types";
+import { asCastTypeName, asChain, asFormatVersion } from "./cast-fields";
 import { collectPagedMessages } from "./hub-grpc";
 import { hydrateText } from "./hydration";
 import { upsertCasts } from "./sqlite";
@@ -43,6 +44,9 @@ interface GatewayCastAddBody {
 	mentionsPositions?: unknown[];
 	parentCastId?: { fid?: number; hash?: string };
 	parentUrl?: string | null;
+	type?: string;
+	formatVersion?: number;
+	chain?: unknown;
 }
 
 interface GatewayMessage {
@@ -116,6 +120,9 @@ export const gatewayCastToCast = async (raw: unknown): Promise<Cast | undefined>
 		// hub-time seconds since the Farcaster epoch — same as the gRPC path
 		timestamp: FARCASTER_EPOCH + timestamp,
 		signer: with0x(message.signer),
+		type: asCastTypeName(body.type),
+		formatVersion: asFormatVersion(body.formatVersion),
+		chain: asChain(body.chain),
 	};
 };
 
