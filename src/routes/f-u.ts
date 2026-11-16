@@ -1,21 +1,35 @@
 import { Elysia, t } from "elysia";
-import { getHubFidByUsername, getUsernameByFid } from "../lib/hub-api";
+import { getFidByUsernameInEitherWorld, getUsernameByFid } from "../lib/hub-api";
 import { getUserByFid } from "../lib/hydration";
 import { hasFidSignedSocialContract } from "../lib/social-contract";
+import { parseFid } from "../lib/util";
 
+// fid params arrive as strings. They are parsed with parseFid — never
+// Number()-coerced (t.Number() here would silently round above 2^53 and
+// serve a neighboring fid's data) — and anything unparseable answers 400.
 export const fu = new Elysia()
 	.get(
 		"/u/:fid",
-		async ({ params: { fid } }) => {
-			const username = await getUsernameByFid(fid);
+		async ({ params: { fid }, set }) => {
+			const parsedFid = parseFid(fid);
+			if (parsedFid === undefined) {
+				set.status = 400;
+				return {
+					success: false,
+					error: "fid must be a decimal integer within the exact range",
+				};
+			}
+			const username = await getUsernameByFid(parsedFid);
 			return {
 				success: true,
-				username,
+				// null, never a dropped key — native users commonly have no
+				// username and clients read the field off the response
+				username: username ?? null,
 			};
 		},
 		{
 			params: t.Object({
-				fid: t.Number(),
+				fid: t.String(),
 			}),
 			detail: {
 				tags: ["F 👉👈 U"],
@@ -25,12 +39,17 @@ export const fu = new Elysia()
 						description: "Returns username",
 						content: {
 							"application/json": {
-								schema: t.Object({
+								// Object, not t.Object: the bare constructor keeps
+								// t.Union assignable to the OpenAPI response type
+								schema: Object({
 									success: t.Boolean(),
-									username: t.String(),
+									username: t.Union([t.String(), t.Null()]),
 								}),
 							},
 						},
+					},
+					400: {
+						description: "fid is not a canonical decimal integer",
 					},
 				},
 			},
@@ -38,11 +57,28 @@ export const fu = new Elysia()
 	)
 	.get(
 		"/f/:username",
-		async ({ params: { username } }) => {
-			const fid = await getHubFidByUsername(username);
+		async ({ params: { username }, set }) => {
+			let resolution;
+			try {
+				resolution = await getFidByUsernameInEitherWorld(username);
+			} catch (error) {
+				console.error(
+					"/f: name lookup outage:",
+					error instanceof Error ? error.message : JSON.stringify(error),
+				);
+				set.status = 503;
+				return {
+					success: false,
+					error: "/f: name lookup outage",
+				};
+			}
 			return {
 				success: true,
-				fid,
+				fid: resolution?.fid ?? null,
+				origin: resolution?.origin ?? null,
+				provisional: resolution?.provisional ?? false,
+				followerCount: resolution?.followerCount ?? null,
+				profileUsername: resolution?.profileUsername ?? null,
 			};
 		},
 		{
@@ -51,18 +87,35 @@ export const fu = new Elysia()
 			}),
 			detail: {
 				tags: ["F 👉👈 U"],
-				summary: "Get fid by username",
+				summary: "Get fid by username (fork-aware)",
+				description:
+					"Snapchain is primary and canonical; Hypersnap answers only " +
+					"on a Snapchain miss and is provisional — names are not " +
+					"uniquely owned in Hypersnap world (collisions are decided " +
+					"by fid and social popularity), so its answers carry the " +
+					"fork profile's follower count and username for judging. " +
+					"An outage answers 503, never a false miss.",
 				responses: {
 					200: {
-						description: "Returns fid",
+						description: "Returns the resolved fid, or null when both registries miss",
 						content: {
 							"application/json": {
-								schema: t.Object({
+								// Object, not t.Object: the bare constructor keeps
+								// t.Union assignable to the OpenAPI response type
+								schema: Object({
 									success: t.Boolean(),
-									username: t.String(),
+									fid: t.Union([t.Number(), t.Null()]),
+									origin: t.Union([t.Literal("snapchain"), t.Literal("hypersnap"), t.Null()]),
+									provisional: t.Boolean(),
+									followerCount: t.Union([t.Number(), t.Null()]),
+									profileUsername: t.Union([t.String(), t.Null()]),
 								}),
 							},
 						},
+					},
+					503: {
+						description:
+							"A name registry failed without answering — an outage, not a miss",
 					},
 				},
 			},
@@ -70,10 +123,18 @@ export const fu = new Elysia()
 	)
 	.get(
 		"/user/:fid",
-		async ({ params: { fid } }) => {
+		async ({ params: { fid }, set }) => {
+			const parsedFid = parseFid(fid);
+			if (parsedFid === undefined) {
+				set.status = 400;
+				return {
+					success: false,
+					error: "fid must be a decimal integer within the exact range",
+				};
+			}
 			const [user, signed] = await Promise.all([
-				getUserByFid(fid),
-				hasFidSignedSocialContract(fid),
+				getUserByFid(parsedFid),
+				hasFidSignedSocialContract(parsedFid),
 			]);
 			return {
 				success: true,
@@ -82,7 +143,7 @@ export const fu = new Elysia()
 		},
 		{
 			params: t.Object({
-				fid: t.Number(),
+				fid: t.String(),
 			}),
 			detail: {
 				tags: ["F 👉👈 U"],
@@ -107,6 +168,9 @@ export const fu = new Elysia()
 								}),
 							},
 						},
+					},
+					400: {
+						description: "fid is not a canonical decimal integer",
 					},
 				},
 			},

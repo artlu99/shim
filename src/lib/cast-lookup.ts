@@ -1,6 +1,7 @@
 import type { Cast } from "../types";
 import { getCastById } from "./hub-grpc";
 import { getHypersnapCastByFidAndHash } from "./hypersnap";
+import { isNativeFid } from "./util";
 
 /*
 	Snapchain and Hypersnap are forked: a message on one is not guaranteed
@@ -41,11 +42,17 @@ export const getCastInEitherWorld = async (
 	}
 
 	let snapchainError: unknown;
-	try {
-		const cast = await getCastById(fid, hash);
-		if (cast) return { cast, origin: "snapchain" };
-	} catch (error) {
-		snapchainError = error;
+	// Native fids cannot exist on Snapchain (the legacy fid space ends at
+	// 2^32); skipping the leg keeps the outage contract intact — a
+	// native-fid lookup still throws if Hypersnap itself failed, because
+	// hypersnapError below is unchanged.
+	if (!isNativeFid(fid)) {
+		try {
+			const cast = await getCastById(fid, hash);
+			if (cast) return { cast, origin: "snapchain" };
+		} catch (error) {
+			snapchainError = error;
+		}
 	}
 
 	if (hypersnapError || snapchainError) {

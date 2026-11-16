@@ -301,3 +301,51 @@ describe("getHypersnapCastByFidAndHash", () => {
 		).rejects.toThrow();
 	});
 });
+
+// native fids arrive as decimal strings on the /v2 client API (measured
+// 2026-11-16: "author":{"fid":"4294967296"}) — a typeof-number check
+// used to silently drop every native cast
+describe("hypersnapCastToCast: native fids", () => {
+	const NATIVE = "4294967296";
+
+	test("maps a string author fid", () => {
+		const cast = hypersnapCastToCast({
+			...FIXTURE,
+			author: { object: "user", fid: NATIVE, username: "fid:4294967296" },
+		});
+		expect(cast).toBeDefined();
+		expect(cast!.fid).toBe(4294967296);
+	});
+
+	test("maps string mention and parent fids alongside numeric legacy ones", () => {
+		const cast = hypersnapCastToCast({
+			...FIXTURE,
+			author: { fid: NATIVE },
+			parent_author: { fid: 230238 },
+			parent_hash: "e6b0bc9da1c6c95692dda69df14bfcc6adfa10e1",
+			mentioned_profiles: [{ fid: 527487 }, { fid: NATIVE }],
+			mentioned_profiles_ranges: [
+				{ start: 0, end: 0 },
+				{ start: 0, end: 0 },
+			],
+		});
+		expect(cast).toBeDefined();
+		expect(cast!.mentions).toEqual([527487, 4294967296]);
+		expect(cast!.parentCastId?.fid).toBe(230238);
+	});
+
+	test("maps a string embed cast_id fid", () => {
+		const cast = hypersnapCastToCast({
+			...FIXTURE,
+			embeds: [{ cast_id: { fid: NATIVE, hash: "abc" } }],
+		});
+		expect(cast!.embeds[0]?.castId?.fid).toBe(4294967296);
+	});
+
+	test("still rejects a missing or garbage author fid", () => {
+		expect(hypersnapCastToCast({ ...FIXTURE, author: {} })).toBeUndefined();
+		expect(
+			hypersnapCastToCast({ ...FIXTURE, author: { fid: "not-a-fid" } }),
+		).toBeUndefined();
+	});
+});

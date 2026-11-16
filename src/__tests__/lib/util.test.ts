@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
 	hexToUint8Array,
+	isNativeFid,
 	mapBatch,
+	parseFid,
+	parseGatewayFid,
 	pluralize,
 	uin8ArrayToHex,
 } from "../../lib/util";
@@ -248,5 +251,72 @@ describe("Utility Functions", () => {
 				),
 			).rejects.toThrow("boom");
 		});
+	});
+});
+
+describe("parseFid", () => {
+	it("accepts legacy fids", () => {
+		expect(parseFid("1")).toBe(1);
+		expect(parseFid("230238")).toBe(230238);
+	});
+
+	it("accepts native fids above the uint32 ceiling", () => {
+		expect(parseFid("4294967296")).toBe(2 ** 32);
+		expect(parseFid("4294967297")).toBe(2 ** 32 + 1);
+	});
+
+	it("accepts every integer up to the exact double range", () => {
+		expect(parseFid(String(2 ** 53 - 1))).toBe(2 ** 53 - 1);
+	});
+
+	it("rejects integers above Number.MAX_SAFE_INTEGER instead of rounding", () => {
+		// Number("9007199254740993") === 9007199254740992 — the silent
+		// neighbor-fid substitution this parser exists to prevent
+		expect(parseFid(String(2 ** 53 + 1))).toBeUndefined();
+	});
+
+	it("rejects floats", () => {
+		expect(parseFid("123.456")).toBeUndefined();
+	});
+
+	it("rejects signs, exponent forms, and empty strings", () => {
+		expect(parseFid("-1")).toBeUndefined();
+		expect(parseFid("1e9")).toBeUndefined();
+		expect(parseFid("+7")).toBeUndefined();
+		expect(parseFid("")).toBeUndefined();
+	});
+
+	it("rejects arbitrary-length digit strings that overflow the double range", () => {
+		expect(parseFid("99999999999999999999")).toBeUndefined();
+	});
+});
+
+describe("isNativeFid", () => {
+	it("draws the native line exactly at 2^32", () => {
+		expect(isNativeFid(2 ** 32 - 1)).toBe(false);
+		expect(isNativeFid(2 ** 32)).toBe(true);
+		expect(isNativeFid(2 ** 32 + 1)).toBe(true);
+	});
+});
+
+describe("parseGatewayFid", () => {
+	it("accepts the JSON-number form (legacy fids)", () => {
+		expect(parseGatewayFid(3)).toBe(3);
+		expect(parseGatewayFid(230238)).toBe(230238);
+	});
+
+	it("accepts the decimal-string form (native fids, u64 protobuf JSON)", () => {
+		expect(parseGatewayFid("4294967296")).toBe(2 ** 32);
+		expect(parseGatewayFid("3")).toBe(3);
+	});
+
+	it("rejects unsafe numbers, overflowing strings, and garbage", () => {
+		expect(parseGatewayFid(2 ** 53 + 1)).toBeUndefined();
+		expect(parseGatewayFid("99999999999999999999")).toBeUndefined();
+		expect(parseGatewayFid("12.5")).toBeUndefined();
+		expect(parseGatewayFid("-3")).toBeUndefined();
+		expect(parseGatewayFid("")).toBeUndefined();
+		expect(parseGatewayFid(null)).toBeUndefined();
+		expect(parseGatewayFid(undefined)).toBeUndefined();
 	});
 });

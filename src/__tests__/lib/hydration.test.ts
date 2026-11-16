@@ -323,6 +323,31 @@ describe("Hydration Functions", () => {
 			expect(primaryAddressSpy).not.toHaveBeenCalled();
 			expect(result).not.toHaveProperty("proNft");
 		});
+
+		it("skips the doomed Warpcast primary-address call for native fids", async () => {
+			const nativeFid = 2 ** 32;
+			hubUserSpy.mockResolvedValue({
+				fid: nativeFid,
+				username: "twoto32",
+				fname: null,
+				attestations: [],
+				displayName: "2^32",
+				pfpUrl: null,
+				bio: "The first native FID on HyperSnap.",
+				primaryAddress: null,
+			});
+
+			const result = await getUserByFid(nativeFid);
+
+			// the Warpcast backend predates the fork's widened fid space —
+			// its answer cannot exist, so it is never asked
+			expect(primaryAddressSpy).not.toHaveBeenCalled();
+			expect(hubUserSpy).toHaveBeenCalledWith(nativeFid);
+			expect(result.fid).toBe(nativeFid);
+			expect(result.primaryAddress).toBeNull();
+			// a resolved null (no address) still caches, unlike a failed call
+			expect(userCacheStore.has(`user:${nativeFid}`)).toBe(true);
+		});
 	});
 
 	describe("getSentFromBySignerKey", () => {

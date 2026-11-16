@@ -1,6 +1,7 @@
 import { HYPERSNAP_API_ENDPOINT, HYPERSNAP_TIMEOUT_MS } from "../constants";
 import type { Cast } from "../types";
 import { asChain, asFormatVersion } from "./cast-fields";
+import { parseGatewayFid } from "./util";
 
 /*
 	Hypersnap (Quilibrium's Snapchain fork) serves a Warpcast-client-shaped
@@ -18,11 +19,11 @@ import { asChain, asFormatVersion } from "./cast-fields";
 
 interface HypersnapEmbed {
 	url?: string;
-	cast_id?: { fid?: number; hash?: string };
+	cast_id?: { fid?: unknown; hash?: string };
 }
 
 interface HypersnapMentionProfile {
-	fid?: number;
+	fid?: unknown;
 	username?: string;
 }
 
@@ -40,8 +41,10 @@ interface HypersnapCast {
 	mentioned_profiles_ranges?: HypersnapMentionRange[];
 	parent_hash?: string;
 	parent_url?: string | null;
-	parent_author?: { fid?: number | null };
-	author?: { fid?: number };
+	parent_author?: { fid?: unknown };
+	// native fids arrive as decimal strings on this API (measured
+	// 2026-11-16: "author":{"fid":"4294967296"}) — parseGatewayFid, always
+	author?: { fid?: unknown };
 	// Articles: snake_case on the client API. `type` here is cast /
 	// cast-reply, not protocol CastType — do not map it onto Cast.type.
 	format_version?: number;
@@ -120,8 +123,8 @@ const spliceMentionUsernames = (
 export const hypersnapCastToCast = (raw: unknown): Cast | undefined => {
 	if (typeof raw !== "object" || raw === null) return undefined;
 	const cast = raw as HypersnapCast;
-	const fid = cast.author?.fid;
-	if (typeof fid !== "number") return undefined;
+	const fid = parseGatewayFid(cast.author?.fid);
+	if (fid === undefined) return undefined;
 	if (typeof cast.hash !== "string" || cast.hash === "") return undefined;
 	const timestamp = cast.timestamp
 		? Math.floor(Date.parse(cast.timestamp) / 1000)
@@ -144,27 +147,35 @@ export const hypersnapCastToCast = (raw: unknown): Cast | undefined => {
 		text,
 		// no protocol-raw mention-placeholder form is available from this API
 		rawText: null,
-		embeds: (cast.embeds ?? []).map((embed) => ({
-			url: embed.url,
-			castId:
-				embed.cast_id && typeof embed.cast_id.fid === "number"
-					? {
-							fid: embed.cast_id.fid,
-							hash: with0x(embed.cast_id.hash ?? ""),
-						}
-					: undefined,
-		})),
+		embeds: (cast.embeds ?? []).map((embed) => {
+			const castIdFid = embed.cast_id
+				? parseGatewayFid(embed.cast_id.fid)
+				: undefined;
+			return {
+				url: embed.url,
+				castId:
+					castIdFid !== undefined
+						? {
+								fid: castIdFid,
+								hash: with0x(embed.cast_id?.hash ?? ""),
+							}
+						: undefined,
+			};
+		}),
+		// order-preserving: mention i pairs with range i in the splice above
 		mentions: profiles
-			.map((profile) => profile.fid)
-			.filter((fid): fid is number => typeof fid === "number"),
+			.map((profile) => parseGatewayFid(profile.fid))
+			.filter((fid): fid is number => fid !== undefined),
 		mentionsPositions,
-		parentCastId:
-			cast.parent_hash && typeof cast.parent_author?.fid === "number"
+		parentCastId: (() => {
+			const parentFid = parseGatewayFid(cast.parent_author?.fid);
+			return cast.parent_hash && parentFid !== undefined
 				? {
-						fid: cast.parent_author.fid,
+						fid: parentFid,
 						hash: with0x(cast.parent_hash),
 					}
-				: undefined,
+				: undefined;
+		})(),
 		parentUrl: cast.parent_url ?? undefined,
 		timestamp,
 		// not exposed by the client API; not stored and not in CastSchema
@@ -231,4 +242,60 @@ export const getHypersnapCastByFidAndHash = async (
 	const cast = await getHypersnapCastByHash(rawHash);
 	if (!cast) return undefined;
 	return cast.fid === fid ? cast : undefined;
+};
+
+export interface HaatzProfile {
+	username: string | null;
+	displayName: string | null;
+	pfpUrl: string | null;
+	bio: string | null;
+	followerCount: number | null;
+}
+
+/**
+ * The fork profile as the node's Warpcast-client-shaped /v2 API holds it
+ * — the only surface exposing the social-standing signals (follower
+ * count, preferred username) that decide contested names in Hypersnap
+ * world. Measured 2026-11-16: the node answers EVERY fid, synthesizing a
+ * placeholder (custody_address "", username "fid:<n>", follower_count 0)
+ * for unknown ones — so a 200 never proves existence, and callers judge
+ * by the fields. fid arrives as a decimal string for native fids; throws
+ * on transport failure or a malformed answer (an outage, never a miss).
+ */
+export const getHaatzProfileByFid = async (
+	fid: number,
+): Promise<HaatzProfile> => {
+	const url = `${HYPERSNAP_API_ENDPOINT}/v2/farcaster/user?fid=${fid}`;
+	const res = await fetch(url, {
+		signal: AbortSignal.timeout(HYPERSNAP_TIMEOUT_MS),
+	});
+	if (!res.ok) {
+		throw new Error(`Hypersnap answered ${res.status} for user ${fid}`);
+	}
+
+	const data = (await res.json().catch(() => undefined)) as
+		| { user?: Record<string, unknown> }
+		| undefined;
+	const user = data?.user;
+	if (typeof user !== "object" || user === null) {
+		throw new Error("Hypersnap user answer did not parse");
+	}
+
+	const profile = user.profile as
+		| { bio?: { text?: unknown } }
+		| undefined;
+
+	return {
+		username: typeof user.username === "string" ? user.username : null,
+		displayName:
+			typeof user.display_name === "string" ? user.display_name : null,
+		// measured 2026-11-16: pfp_url sits on the user object, not in
+		// profile (profile carries the bio object)
+		pfpUrl: typeof user.pfp_url === "string" ? user.pfp_url : null,
+		bio:
+			typeof profile?.bio?.text === "string" ? profile.bio.text : null,
+		// u64-adjacent: measured as a number (9), could be a string —
+		// parseGatewayFid's exactness applies to counts the same way
+		followerCount: parseGatewayFid(user.follower_count) ?? null,
+	};
 };

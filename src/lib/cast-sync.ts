@@ -1,5 +1,6 @@
 import { getHaatzCastsByFid, getHaatzChannelFeed } from "./haatz-gateway";
 import { getCastsByFid, rawChannelFeed } from "./hub-grpc";
+import { isNativeFid } from "./util";
 
 /*
 	The sync-side twin of cast-lookup: Snapchain and Hypersnap are forked,
@@ -43,6 +44,23 @@ export const syncCastsByFid = async (
 			fid,
 			error instanceof Error ? error.message : JSON.stringify(error),
 		);
+	}
+
+	// A native fid cannot exist on Snapchain — falling back would be worse
+	// than wasted work: on a Hypersnap outage it would read Snapchain's
+	// (definitionally empty) answer as a miss and advance watermarks past
+	// nothing. A clean empty Hypersnap answer is the true miss.
+	if (isNativeFid(fid)) {
+		if (haatzError !== undefined) {
+			throw new Error(
+				`cast sync outage for fid ${fid}: ${
+					haatzError instanceof Error
+						? haatzError.message
+						: JSON.stringify(haatzError)
+				}`,
+			);
+		}
+		return { casts: [], numNew: 0 };
 	}
 
 	try {

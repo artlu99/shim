@@ -11,6 +11,7 @@ import { asCastTypeName, asChain, asFormatVersion } from "./cast-fields";
 import { collectPagedMessages } from "./hub-grpc";
 import { hydrateText } from "./hydration";
 import { upsertCasts } from "./sqlite";
+import { parseGatewayFid } from "./util";
 
 /*
 	The haatz node serves the snapchain /v1 HTTP JSON gateway on 443 — the
@@ -29,12 +30,16 @@ import { upsertCasts } from "./sqlite";
 
 	Field shapes are protobuf JSON as measured live (2026-11-12): hashes
 	and signers are 0x-prefixed hex strings; the mapper validates before
-	trusting, same discipline as hypersnap.ts.
+	trusting, same discipline as hypersnap.ts. Fids are u64 and arrive as
+	JSON numbers for legacy fids but DECIMAL STRINGS for native fids
+	(measured 2026-11-16, e.g. "fid":"4294967296") — every fid goes
+	through parseGatewayFid, which accepts both forms; a typeof-number
+	check here used to silently drop every native cast.
 */
 
 interface GatewayEmbed {
 	url?: string;
-	cast_id?: { fid?: number; hash?: string };
+	cast_id?: { fid?: unknown; hash?: string };
 }
 
 interface GatewayCastAddBody {
@@ -42,7 +47,7 @@ interface GatewayCastAddBody {
 	embeds?: GatewayEmbed[];
 	mentions?: unknown[];
 	mentionsPositions?: unknown[];
-	parentCastId?: { fid?: number; hash?: string };
+	parentCastId?: { fid?: unknown; hash?: string };
 	parentUrl?: string | null;
 	type?: string;
 	formatVersion?: number;
@@ -54,7 +59,7 @@ interface GatewayMessage {
 	signer?: string;
 	data?: {
 		type?: string;
-		fid?: number;
+		fid?: unknown;
 		timestamp?: number;
 		castAddBody?: GatewayCastAddBody;
 	};
@@ -74,18 +79,21 @@ const with0x = (value: string): `0x${string}` =>
 export const gatewayCastToCast = async (raw: unknown): Promise<Cast | undefined> => {
 	if (typeof raw !== "object" || raw === null) return undefined;
 	const message = raw as GatewayMessage;
-	const fid = message.data?.fid;
+	const fid = parseGatewayFid(message.data?.fid);
 	const timestamp = message.data?.timestamp;
 	const body = message.data?.castAddBody;
-	if (typeof fid !== "number") return undefined;
+	if (fid === undefined) return undefined;
 	if (typeof timestamp !== "number") return undefined;
 	if (typeof message.hash !== "string" || message.hash === "") return undefined;
 	if (typeof message.signer !== "string" || message.signer === "") return undefined;
 	if (!body) return undefined;
 
-	const mentions = (body.mentions ?? []).filter(
-		(fid): fid is number => typeof fid === "number",
-	);
+	// parsed per element, order-preserving — a native mention arrives as a
+	// decimal string and must survive alongside its mentionsPositions
+	// entry or hydrateText's index pairing misaligns
+	const mentions = (body.mentions ?? [])
+		.map(parseGatewayFid)
+		.filter((fid): fid is number => fid !== undefined);
 	const mentionsPositions = (body.mentionsPositions ?? []).filter(
 		(position): position is number => typeof position === "number",
 	);
@@ -97,25 +105,34 @@ export const gatewayCastToCast = async (raw: unknown): Promise<Cast | undefined>
 		hash: with0x(message.hash),
 		text: enrichedText,
 		rawText,
-		embeds: (body.embeds ?? []).map((embed) => ({
-			url: embed.url,
-			castId:
-				embed.cast_id && typeof embed.cast_id.fid === "number"
-					? {
-							fid: embed.cast_id.fid,
-							hash: with0x(embed.cast_id.hash ?? ""),
-						}
-					: undefined,
-		})),
+		embeds: (body.embeds ?? []).map((embed) => {
+			const castIdFid = embed.cast_id
+				? parseGatewayFid(embed.cast_id.fid)
+				: undefined;
+			return {
+				url: embed.url,
+				castId:
+					castIdFid !== undefined
+						? {
+								fid: castIdFid,
+								hash: with0x(embed.cast_id?.hash ?? ""),
+							}
+						: undefined,
+			};
+		}),
 		mentions,
 		mentionsPositions,
-		parentCastId:
-			body.parentCastId && typeof body.parentCastId.fid === "number"
+		parentCastId: (() => {
+			const parentFid = body.parentCastId
+				? parseGatewayFid(body.parentCastId.fid)
+				: undefined;
+			return parentFid !== undefined
 				? {
-						fid: body.parentCastId.fid,
-						hash: with0x(body.parentCastId.hash ?? ""),
+						fid: parentFid,
+						hash: with0x(body.parentCastId?.hash ?? ""),
 					}
-				: undefined,
+				: undefined;
+		})(),
 		parentUrl: body.parentUrl ?? undefined,
 		// hub-time seconds since the Farcaster epoch — same as the gRPC path
 		timestamp: FARCASTER_EPOCH + timestamp,

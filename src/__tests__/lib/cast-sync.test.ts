@@ -134,3 +134,40 @@ describe("syncChannelFeed", () => {
 		).rejects.toThrow(/outage/);
 	});
 });
+
+// Native fids live above the legacy uint32 ceiling — Snapchain cannot know
+// them. The fallback must never run for one, and a Hypersnap outage must
+// stay an outage instead of wearing Snapchain's empty answer as a miss.
+describe("syncCastsByFid: native fids", () => {
+	const NATIVE_FID = 4294967296;
+
+	test("a clean Hypersnap miss is the miss — Snapchain is never consulted", async () => {
+		stubLegs(
+			async () => result,
+			async () => {
+				throw new Error("Snapchain must not be called");
+			},
+		);
+
+		const { casts } = await syncCastsByFid(NATIVE_FID);
+
+		expect(casts).toEqual([]);
+		expect(snapchain).not.toHaveBeenCalled();
+	});
+
+	test("a Hypersnap outage is an outage, not a legacy-world miss", async () => {
+		stubLegs(
+			async () => {
+				throw new Error("haatz gateway answered 500");
+			},
+			async () => {
+				throw new Error("Snapchain must not be called");
+			},
+		);
+
+		expect(syncCastsByFid(NATIVE_FID)).rejects.toThrow(
+			/cast sync outage for fid 4294967296/,
+		);
+		expect(snapchain).not.toHaveBeenCalled();
+	});
+});

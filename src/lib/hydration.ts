@@ -2,7 +2,7 @@ import { HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import type { User } from "../types";
 import { getUserInEitherWorld } from "./hub-api";
 import redis, { Ttl } from "./redis";
-import { mapBatch } from "./util";
+import { isNativeFid, mapBatch } from "./util";
 import { getUserPrimaryAddress } from "./warpcast";
 
 // Drop legacy user.proNft from Redis hits written before the field was removed.
@@ -44,9 +44,13 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 			);
 		}
 
+		// A native fid has no Warpcast backend identity — the fork's fid
+		// space starts past the backend's 2^32 ceiling — so the call would
+		// be doomed. Resolving null (a real "no address", not a fetch
+		// failure) keeps the result cacheable below.
 		const [hubUser, primaryAddress] = await Promise.all([
 			getUserInEitherWorld(fid),
-			getUserPrimaryAddress(fid),
+			isNativeFid(fid) ? Promise.resolve(null) : getUserPrimaryAddress(fid),
 		]);
 
 		const user: User = {

@@ -12,7 +12,9 @@ import type {
 	UserNameProof,
 	VerificationAddAddressMessage,
 } from "./farcaster-types";
+import { getHaatzProfileByFid } from "./hypersnap";
 import redis, { Ttl } from "./redis";
+import { isNativeFid, parseGatewayFid } from "./util";
 
 const hub = () => {
 	// 20260905 pop.farcaster.xyz and pow.farcaster.xyz are down
@@ -196,17 +198,132 @@ async function cachedFetcherPaginatedGet<T>(
 	return messages;
 }
 
+/**
+ * How a gateway answered a name-proof lookup. The gateways answer an
+ * unknown name with HTTP 400 (measured 2026-11-16 on both worlds:
+ * {"error":"Failed to get username proof","error_detail":"status:
+ * NotFound,..."}) — not a 404. A 400/404 is the clean miss; anything
+ * else is an outage, never a verdict.
+ */
+const isNameProofMiss = (error: unknown): boolean => {
+	if (typeof error === "object" && error !== null && "status" in error) {
+		const status = Number((error as { status: unknown }).status);
+		if (status === 400 || status === 404) {
+			return true;
+		}
+	}
+	return /username proof not found/i.test(String(error));
+};
+
+export interface UsernameResolution {
+	fid: number;
+	/** which world's registry answered */
+	origin: "snapchain" | "hypersnap";
+	/**
+	 * Hypersnap-world answers are provisional: names are not uniquely
+	 * owned there — multiple fids can carry the same name and the
+	 * deciding vote is the fid's identity and social standing, not a
+	 * registry (multiple "Muhammed Ali"s). A Snapchain answer is
+	 * canonical; a Hypersnap answer is the node registry's pick, with
+	 * the social signals attached so callers can judge.
+	 */
+	provisional: boolean;
+	/** fork profile follower count — null when the profile leg failed */
+	followerCount: number | null;
+	/** fork profile username — null when the profile leg failed */
+	profileUsername: string | null;
+}
+
+/**
+ * The fork-aware name primitive — name→fid across both worlds.
+ * Snapchain is PRIMARY (its proofs are canonical for the legacy space
+ * the registry actually enforces); Hypersnap is the backup for native
+ * names, and provisional when it answers. The Hypersnap leg also joins
+ * the fork profile (follower count, preferred username) — the social
+ * popularity signal the fork world resolves contested names by.
+ *
+ * undefined is a clean miss on BOTH worlds. A throw means at least one
+ * world failed without answering and neither answered with a proof —
+ * the verdict is withheld and the route answers 503.
+ */
+export const getFidByUsernameInEitherWorld = async (
+	username: string,
+): Promise<UsernameResolution | undefined> => {
+	const uri = `/v1/userNameProofByName?name=${encodeURIComponent(username)}`;
+
+	let snapchainError: unknown;
+	try {
+		// typing is a white lie because it was deserialized over http
+		const res = await cachedFetcherGet<UserNameProof>(uri, Ttl.LONG);
+		const fid = parseGatewayFid(res?.fid);
+		if (fid !== undefined) {
+			return { fid, origin: "snapchain", provisional: false, followerCount: null, profileUsername: null };
+		}
+	} catch (error) {
+		snapchainError = error;
+		if (!isNameProofMiss(error)) {
+			console.error(
+				"getFidByUsernameInEitherWorld: snapchain name lookup failed, falling back to hypersnap:",
+				username,
+				error instanceof Error ? error.message : JSON.stringify(error),
+			);
+		}
+	}
+
+	let haatzError: unknown;
+	try {
+		const res = await cachedHaatzGet<UserNameProof>(uri, Ttl.LONG);
+		const fid = parseGatewayFid(res?.fid);
+		if (fid !== undefined) {
+			// enrichment is best-effort: the proof is the answer, the
+			// profile is the popularity context
+			const profile = await getHaatzProfileByFid(fid).catch(
+				() => undefined,
+			);
+			return {
+				fid,
+				origin: "hypersnap",
+				provisional: true,
+				followerCount: profile?.followerCount ?? null,
+				profileUsername: profile?.username ?? null,
+			};
+		}
+	} catch (error) {
+		haatzError = error;
+		if (!isNameProofMiss(error)) {
+			console.error(
+				"getFidByUsernameInEitherWorld: hypersnap name lookup failed:",
+				username,
+				error instanceof Error ? error.message : JSON.stringify(error),
+			);
+		}
+	}
+
+	const realOutages = [snapchainError, haatzError].filter(
+		(error) => error !== undefined && !isNameProofMiss(error),
+	);
+	if (realOutages.length > 0) {
+		const parts = realOutages
+			.map((error) =>
+				error instanceof Error ? error.message : JSON.stringify(error),
+			)
+			.join(" | ");
+		throw new Error(`name lookup outage for ${username}: ${parts}`);
+	}
+
+	return undefined;
+};
+
+/**
+ * Lenient wrapper for the internal callers (refresh's username walk,
+ * Warpcast-URI search, allCasts): fork-aware, but outages degrade to
+ * undefined like the pre-fork behavior instead of throwing mid-walk.
+ */
 export const getHubFidByUsername = async (
 	username: string,
 ): Promise<number | undefined> => {
 	try {
-		// typing is a white lie because it was deserialized over http
-		const res = await cachedFetcherGet<UserNameProof>(
-			`/v1/userNameProofByName?name=${username}`,
-			Ttl.LONG,
-		);
-		const fid = res.fid;
-		return fid;
+		return (await getFidByUsernameInEitherWorld(username))?.fid;
 	} catch (error) {
 		console.error(
 			"Error fetching fid by username:",
@@ -438,6 +555,13 @@ export const getUserInEitherWorld = async (
 			fid,
 			error instanceof Error ? error.message : JSON.stringify(error),
 		);
+	}
+
+	// A native fid cannot exist on Snapchain — the legacy world predates
+	// the fork's widened fid space — so there is nothing to fall back to.
+	// undefined is the honest miss (uncached, so the next call retries).
+	if (isNativeFid(fid)) {
+		return undefined;
 	}
 
 	return getHubUserByFid(fid);

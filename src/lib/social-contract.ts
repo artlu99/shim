@@ -3,6 +3,7 @@ import { retry } from "radash";
 import type { Hex } from "viem";
 import { getVerifiedEthAddressesByFid } from "./hub-api";
 import redis, { Ttl } from "./redis";
+import { isNativeFid } from "./util";
 import { getUserPrimaryAddress } from "./warpcast";
 
 // Soulbound ERC-721 ("Network School Farcaster client") minted to whichever
@@ -66,6 +67,14 @@ const inFlight = new Map<number, Promise<boolean>>();
 // fid has verified on the hub, falling back to the Warpcast primary address
 // alone when the hub lookup fails.
 const getSigningAddressesForFid = async (fid: number): Promise<Hex[]> => {
+	// Native fids cannot have legacy-world verifications — the verified
+	// address source here is Snapchain-only and the legacy fid space ends
+	// at 2^32, so both the lookup and the doomed primary-address fallback
+	// below are skippable by construction. [] = proven none, which caches
+	// signed=false without a single outbound call.
+	if (isNativeFid(fid)) {
+		return [];
+	}
 	const verified = await getVerifiedEthAddressesByFid(fid);
 	// undefined = hub lookup failed → degrade to the single primary address.
 	// [] = genuinely no verifications → stop there: a primary address is

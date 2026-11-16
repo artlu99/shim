@@ -1,10 +1,19 @@
 import { Elysia, t } from "elysia";
 import { hasFidSignedSocialContract } from "../lib/social-contract";
+import { parseFid } from "../lib/util";
 
 export const socialContract = new Elysia().get(
 	"/signed/:fid",
-	async ({ params: { fid } }) => {
-		const signed = await hasFidSignedSocialContract(fid);
+	async ({ params: { fid }, set }) => {
+		const parsedFid = parseFid(fid);
+		if (parsedFid === undefined) {
+			set.status = 400;
+			return {
+				success: false,
+				error: "fid must be a decimal integer within the exact range",
+			};
+		}
+		const signed = await hasFidSignedSocialContract(parsedFid);
 		return {
 			success: true,
 			signed,
@@ -12,7 +21,7 @@ export const socialContract = new Elysia().get(
 	},
 	{
 		params: t.Object({
-			fid: t.Number(),
+			fid: t.String(),
 		}),
 		detail: {
 			tags: ["Social Contract"],
@@ -29,6 +38,9 @@ export const socialContract = new Elysia().get(
 							}),
 						},
 					},
+				},
+				400: {
+					description: "fid is not a canonical decimal integer",
 				},
 			},
 		},

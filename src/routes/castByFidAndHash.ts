@@ -3,6 +3,7 @@ import { getCastInEitherWorld } from "../lib/cast-lookup";
 import { getUserByFid } from "../lib/hydration";
 import { getCastByHash, upsertCasts } from "../lib/sqlite";
 import { getChannel, getChannelIdFromUrl } from "../lib/warpcast";
+import { parseFid } from "../lib/util";
 import { CastSchema } from "../types";
 
 /*
@@ -18,6 +19,14 @@ import { CastSchema } from "../types";
 export const getCastByFidAndHash = new Elysia().get(
 	"/i/:fid/:castHash",
 	async ({ params: { fid, castHash }, set }) => {
+		const parsedFid = parseFid(fid);
+		if (parsedFid === undefined) {
+			set.status = 400;
+			return {
+				success: false,
+				error: "fid must be a decimal integer within the exact range",
+			};
+		}
 		const hash: `0x${string}` = `0x${castHash
 			.replace(/^0x/, "")
 			.toLowerCase()}`;
@@ -26,7 +35,7 @@ export const getCastByFidAndHash = new Elysia().get(
 
 		let result;
 		try {
-			result = await getCastInEitherWorld(fid, hash);
+			result = await getCastInEitherWorld(parsedFid, hash);
 		} catch (error) {
 			console.error(
 				"getCastByFidAndHash: cast lookup outage:",
@@ -59,7 +68,7 @@ export const getCastByFidAndHash = new Elysia().get(
 			}
 		}
 
-		const user = await getUserByFid(fid);
+		const user = await getUserByFid(parsedFid);
 		const channelId = cast.parentUrl
 			? getChannelIdFromUrl(cast.parentUrl)
 			: undefined;
@@ -72,7 +81,7 @@ export const getCastByFidAndHash = new Elysia().get(
 	},
 	{
 		params: t.Object({
-			fid: t.Number(),
+			fid: t.String(),
 			castHash: t.String(),
 		}),
 		detail: {
@@ -98,6 +107,9 @@ export const getCastByFidAndHash = new Elysia().get(
 				503: {
 					description:
 						"A cast world is unreachable without answering — an outage, not a miss",
+				},
+				400: {
+					description: "fid is not a canonical decimal integer",
 				},
 			},
 		},

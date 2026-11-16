@@ -195,3 +195,45 @@ describe("getUserInEitherWorld", () => {
 		expect(await getUserInEitherWorld(999999999)).toBeUndefined();
 	});
 });
+
+// Native fids live above the legacy uint32 ceiling, so Snapchain (crackle)
+// cannot know them — the fallback leg must not even be tried, and its
+// (definitionally empty) answer must never paper over a Hypersnap outage.
+describe("getUserInEitherWorld: native fids", () => {
+	const NATIVE_FID = 4294967296;
+
+	test("a native fid resolves from Hypersnap alone — crackle is never consulted", async () => {
+		haatzAnswer((url) =>
+			url.includes("userNameProofsByFid")
+				? HAATZ_PROOFS
+				: HAATZ_USER_DATA,
+		);
+
+		const user = await getUserInEitherWorld(NATIVE_FID);
+
+		expect(user?.displayName).toBe("Haatz User");
+	});
+
+	test("a native fid miss is a miss without a crackle call", async () => {
+		// any fetch that leaks past the haatz host throws — a crackle call
+		// would fail the test instead of silently answering an empty world
+		haatzAnswer((url) =>
+			url.includes("userNameProofsByFid")
+				? { proofs: [] }
+				: { messages: [] },
+		);
+
+		expect(await getUserInEitherWorld(NATIVE_FID)).toBeUndefined();
+	});
+
+	test("a Hypersnap outage stays a miss, not a legacy-world answer", async () => {
+		stubFetch((url) => {
+			if (url.includes("haatz.quilibrium.com")) {
+				return new Response("internal error", { status: 500 });
+			}
+			throw new Error(`crackle must not be called, got: ${url}`);
+		});
+
+		expect(await getUserInEitherWorld(NATIVE_FID)).toBeUndefined();
+	});
+});
