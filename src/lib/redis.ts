@@ -153,7 +153,15 @@ const withHotCache = (client: Redis) => {
 			if (result === "OK") {
 				const bytes = wireSize(value);
 				const record = recordWrite(key, opts, bytes);
-				if (record !== undefined) {
+				// Parse only what the LRU can actually hold: hot.set refuses
+				// oversize entries (channelFeed:*, paginated hub: lists can
+				// be hundreds of KB), so parsing those first spent a full
+				// JSON.parse on every big cache write for an entry that
+				// would never be served.
+				if (
+					record !== undefined &&
+					bytes <= HOT_MAX_WIRE_BYTES
+				) {
 					const remainingMs = record.expiresAtMs - Date.now();
 					hot.set(
 						key,
