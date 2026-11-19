@@ -19,7 +19,7 @@ export const processFids = async (allFids: number[]) => {
 	// Snapchain gRPC on a clean miss.
 	const watermarks = await getLatestCastTimestamps(allFids);
 
-	// Process FIDs in parallel batches of REFRESH_PARALLEL_BATCHES (20).
+	// Process FIDs in parallel batches of REFRESH_PARALLEL_BATCHES.
 	// A fid where BOTH worlds are unreachable is counted, not silently
 	// treated as an empty world — the stats carry the failure.
 	let failedFids = 0;

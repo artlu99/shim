@@ -23,13 +23,20 @@ export const MAX_FOLLOWERS = 100;
 export const MAX_REFRESH_FIDS = 100;
 // Fids walked concurrently by processFids. Each fid's walk parses up to
 // MAX_SYNC_MESSAGES messages in 500-message pages on the single JS
-// thread, so this constant is the wave's amplitude: 20-wide left the
-// parser no breathing room on the 2-core VPS — CPU saturated for the
-// whole walk, lmdis starved, cache legs hit their deadline and failed
-// open, and the fail-open traffic re-saturated the core. 4 keeps the
-// same total work at ~1/5 the peak pressure; a full walk takes
-// proportionally longer, which a background seeder does not mind.
-export const REFRESH_PARALLEL_BATCHES = 4;
+// thread, so this constant is the wave's amplitude. History: 20-wide
+// saturated the parse thread and — back when lmdis sat at its 512m cap —
+// starved the cache into its deadline, and the fail-open traffic re-
+// saturated the core. That amplification loop is gone (lmdis has headroom,
+// cache legs hold, error rate zero), so width only costs walk-time latency
+// now, never failures. 12: 3x faster than the incident-era 4, with probe
+// headroom kept short of 20 (the only width ever observed pushing /health
+// probes past their timeout). Overridable per box — the fleet's boxes
+// differ — via REFRESH_PARALLEL_BATCHES in .env.
+const parsedBatchWidth = Number(process.env.REFRESH_PARALLEL_BATCHES);
+export const REFRESH_PARALLEL_BATCHES =
+	Number.isInteger(parsedBatchWidth) && parsedBatchWidth >= 1
+		? parsedBatchWidth
+		: 12;
 
 // getCastsByFid walks pages of CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE until the
 // caller's cap or the hub runs dry. /refresh passes this so a cold fid is not
