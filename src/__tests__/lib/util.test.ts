@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	hexToUint8Array,
 	isNativeFid,
+	makeFlightGuard,
 	mapBatch,
 	parseFid,
 	parseGatewayFid,
@@ -318,5 +319,26 @@ describe("parseGatewayFid", () => {
 		expect(parseGatewayFid("")).toBeUndefined();
 		expect(parseGatewayFid(null)).toBeUndefined();
 		expect(parseGatewayFid(undefined)).toBeUndefined();
+	});
+});
+
+describe("makeFlightGuard", () => {
+	it("claims a key exactly once until release", () => {
+		const guard = makeFlightGuard();
+		expect(guard.tryClaim("feed:a:25")).toBe(true);
+		expect(guard.tryClaim("feed:a:25")).toBe(false);
+		guard.release("feed:a:25");
+		expect(guard.tryClaim("feed:a:25")).toBe(true);
+	});
+
+	it("tracks keys independently", () => {
+		const guard = makeFlightGuard();
+		expect(guard.tryClaim("a")).toBe(true);
+		expect(guard.tryClaim("b")).toBe(true);
+		expect(guard.tryClaim("a")).toBe(false);
+		expect(guard.tryClaim("b")).toBe(false);
+		guard.release("a");
+		expect(guard.tryClaim("a")).toBe(true);
+		expect(guard.tryClaim("b")).toBe(false);
 	});
 });

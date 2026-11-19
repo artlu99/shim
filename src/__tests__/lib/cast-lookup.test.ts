@@ -119,3 +119,82 @@ describe("getCastInEitherWorld", () => {
 		);
 	});
 });
+
+// Concurrent callers of the same (fid, hash) share one walk — the
+// coalescing must not change what the walk answers, only how many times
+// it runs.
+describe("getCastInEitherWorld: coalescing", () => {
+	// a leg that stays busy long enough for a second caller to join
+	const busy = <T>(answer: () => Promise<T>, ms = 15) => {
+		let calls = 0;
+		return {
+			impl: async () => {
+				calls++;
+				await new Promise((resolve) => setTimeout(resolve, ms));
+				return answer();
+			},
+			callCount: () => calls,
+		};
+	};
+
+	test("concurrent callers of the same cast share one walk", async () => {
+		const snapchain = busy(async () => cast(1));
+		const hyper = busy(async () => undefined);
+		stubWorlds(snapchain.impl, hyper.impl);
+
+		const [a, b] = await Promise.all([
+			getCastInEitherWorld(1, HASH),
+			getCastInEitherWorld(1, HASH),
+		]);
+
+		expect(hyper.callCount()).toBe(1);
+		expect(snapchain.callCount()).toBe(1);
+		expect(a?.origin).toBe("snapchain");
+		expect(b?.origin).toBe("snapchain");
+	});
+
+	test("distinct fids do not coalesce", async () => {
+		const snapchain = busy(async () => cast(1));
+		stubWorlds(snapchain.impl, async () => undefined);
+
+		await Promise.all([
+			getCastInEitherWorld(1, HASH),
+			getCastInEitherWorld(2, HASH),
+		]);
+
+		expect(snapchain.callCount()).toBe(2);
+	});
+
+	test("a shared outage throws for every concurrent caller and clears", async () => {
+		const hyper = busy(async () => undefined);
+		const snapchain = busy(async (): Promise<never> => {
+			throw new Error("hub rpc deadline exceeded");
+		});
+		stubWorlds(snapchain.impl, hyper.impl);
+
+		const [a, b] = await Promise.allSettled([
+			getCastInEitherWorld(1, HASH),
+			getCastInEitherWorld(1, HASH),
+		]);
+		expect(a.status).toBe("rejected");
+		expect(b.status).toBe("rejected");
+		// both callers shared ONE walk
+		expect(snapchain.callCount()).toBe(1);
+		expect(hyper.callCount()).toBe(1);
+
+		// the dead flight must not be reused: the next caller starts fresh
+		stubWorlds(async () => cast(1), async () => undefined);
+		const result = await getCastInEitherWorld(1, HASH);
+		expect(result?.origin).toBe("snapchain");
+	});
+
+	test("a settled flight is not reused — a sequential repeat re-walks", async () => {
+		const snapchain = busy(async () => cast(1));
+		stubWorlds(snapchain.impl, async () => undefined);
+
+		await getCastInEitherWorld(1, HASH);
+		await getCastInEitherWorld(1, HASH);
+
+		expect(snapchain.callCount()).toBe(2);
+	});
+});

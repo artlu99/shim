@@ -5,6 +5,15 @@ export type LmdisClientConfig = {
     url: string;
     token: string;
     fetch?: typeof fetch;
+    /**
+     * shim-local: per-request deadline. The vendored client used to issue
+     * its POST with no signal, so an lmdis that accepts the connection but
+     * stalls (fsync stall, paused process) hung callers forever — and,
+     * once cache reads sit in front of coalesced walks, pinned in-flight
+     * entries permanently. AbortSignal.timeout is applied per request
+     * when set; unset keeps the old unbounded behavior.
+     */
+    timeoutMs?: number;
   };
   
   export type SetCommandOptions = {
@@ -78,7 +87,8 @@ export type LmdisClientConfig = {
     private readonly baseUrl: string;
     private readonly headers: Record<string, string>;
     private readonly fetchFn: typeof fetch;
-  
+    private readonly timeoutMs: number | undefined;
+
     constructor(config: LmdisClientConfig) {
       this.baseUrl = config.url.replace(/\/$/, "");
       this.headers = {
@@ -86,14 +96,34 @@ export type LmdisClientConfig = {
         "Content-Type": "application/json",
       };
       this.fetchFn = config.fetch ?? fetch;
+      this.timeoutMs = config.timeoutMs;
     }
-  
+
     private async request<T>(body: unknown[]): Promise<T> {
-      const res = await this.fetchFn(this.baseUrl, {
-        method: "POST",
-        headers: this.headers,
-        body: JSON.stringify(body),
-      });
+      let res: Response;
+      try {
+        res = await this.fetchFn(this.baseUrl, {
+          method: "POST",
+          headers: this.headers,
+          body: JSON.stringify(body),
+          signal:
+            this.timeoutMs !== undefined
+              ? AbortSignal.timeout(this.timeoutMs)
+              : undefined,
+        });
+      } catch (error) {
+        // label the deadline with the cache leg, same as the parse failure
+        // below — a route-level catch must be able to tell which leg threw
+        if (
+          error instanceof Error &&
+          (error.name === "TimeoutError" || error.name === "AbortError")
+        ) {
+          throw new LmdisError(
+            `lmdis: request timed out after ${this.timeoutMs}ms`,
+          );
+        }
+        throw error;
+      }
       let data: { result?: T; error?: string; code?: string };
       try {
         data = (await res.json()) as { result?: T; error?: string; code?: string };

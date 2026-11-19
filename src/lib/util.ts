@@ -78,3 +78,26 @@ export const mapBatch = async <T, R>(
 	}
 	return results;
 };
+
+// Mutex-flavored in-flight guard for fire-and-forget work that must not
+// stack: tryClaim(key) returns true exactly once per key until release.
+// Used by the channel-feed background revalidation, which fired one full
+// feed walk per cache hit — a polling client stacked them. (Distinct from
+// cast-lookup's inFlight promise map, which *coalesces* duplicate callers
+// onto one shared result; this simply refuses duplicates. Same shape as
+// castByHash.ts's refreshingFids set.)
+export const makeFlightGuard = () => {
+	const claimed = new Set<string>();
+	return {
+		tryClaim: (key: string): boolean => {
+			if (claimed.has(key)) {
+				return false;
+			}
+			claimed.add(key);
+			return true;
+		},
+		release: (key: string): void => {
+			claimed.delete(key);
+		},
+	};
+};

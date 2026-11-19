@@ -1,6 +1,7 @@
 import { HYPERSNAP_API_ENDPOINT, HYPERSNAP_TIMEOUT_MS } from "../constants";
 import type { Cast } from "../types";
 import { asChain, asFormatVersion } from "./cast-fields";
+import redis, { Ttl } from "./redis";
 import { parseGatewayFid } from "./util";
 
 /*
@@ -53,6 +54,13 @@ interface HypersnapCast {
 
 const with0x = (hash: string): `0x${string}` =>
 	`0x${hash.replace(/^0x/, "").toLowerCase()}`;
+
+// lmdis cannot distinguish an absent key from a cached null (both read
+// back null — same lesson as warpcast.ts's not-found sentinel), so an
+// authoritative 404 caches as a sentinel object.
+const HYPERSNAP_404 = { hypersnap404: true } as const;
+const isHypersnap404 = (value: unknown): boolean =>
+	typeof value === "object" && value !== null && "hypersnap404" in value;
 
 /**
  * Splice @username into UTF-8 text at each mentioned_profiles_ranges entry.
@@ -192,6 +200,18 @@ export const hypersnapCastToCast = (raw: unknown): Cast | undefined => {
  * Resolves undefined on an authoritative miss (HTTP 404) and throws on a
  * transport failure or a malformed answer — callers must treat a throw as
  * an outage (503), never as "cast not found".
+ *
+ * Cached through lmdis under hyp:cast:<hash> (SHORT TTL) — this is the
+ * PRIMARY cast leg and it used to bypass the cache entirely, so every
+ * warm /h lookup and every /reverse-chron item paid a live HTTPS call,
+ * forever. 404s are negatively cached the way the Warpcast client caches
+ * its 404s (sentinel object — lmdis cannot store a bare null): a
+ * Snapchain-world hash absent from the local corpus is unresolvable by
+ * hash alone and would otherwise re-hit the live index on every request,
+ * indefinitely. An outage or a malformed answer is never cached — the
+ * throw stands, and the next caller retries the network. Cache-leg
+ * failures degrade to uncached (log + live fetch): a cache error can
+ * neither soften an outage into a miss nor the reverse.
  */
 export const getHypersnapCastByHash = async (
 	rawHash: `0x${string}`,
@@ -199,11 +219,47 @@ export const getHypersnapCastByHash = async (
 	// normalize at the boundary — the route lowercases too, but this
 	// client must not depend on every caller having done it
 	const hash = with0x(rawHash);
+	const cacheKey = `hyp:cast:${hash}`;
+
+	let cached: unknown = null;
+	try {
+		cached = await redis().get(cacheKey);
+	} catch (error) {
+		console.error(
+			"Error reading hypersnap cast cache:",
+			hash,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+	}
+	if (cached !== null && cached !== undefined) {
+		if (isHypersnap404(cached)) {
+			return undefined;
+		}
+		// A hit stands in for the live answer only if it is still the cast
+		// this key names — a corrupt or foreign entry degrades to uncached.
+		const hit = cached as Cast;
+		if (typeof hit.hash === "string" && hit.hash === hash) {
+			return hit;
+		}
+		console.error("Ignoring a poisoned hypersnap cast cache entry:", hash);
+	}
+
 	const url = `${HYPERSNAP_API_ENDPOINT}/v2/farcaster/cast?identifier=${hash}&type=hash`;
 	const res = await fetch(url, {
 		signal: AbortSignal.timeout(HYPERSNAP_TIMEOUT_MS),
 	});
-	if (res.status === 404) return undefined;
+	if (res.status === 404) {
+		try {
+			await redis().set(cacheKey, HYPERSNAP_404, { ex: Ttl.SHORT });
+		} catch (error) {
+			console.error(
+				"Error writing hypersnap cast negative cache:",
+				hash,
+				error instanceof Error ? error.message : JSON.stringify(error),
+			);
+		}
+		return undefined;
+	}
 	if (!res.ok) {
 		throw new Error(`Hypersnap answered ${res.status}`);
 	}
@@ -222,6 +278,15 @@ export const getHypersnapCastByHash = async (
 	if (cast.hash !== hash) {
 		throw new Error(
 			`Hypersnap answered a different cast: ${cast.hash} != ${hash}`,
+		);
+	}
+	try {
+		await redis().set(cacheKey, cast, { ex: Ttl.SHORT });
+	} catch (error) {
+		console.error(
+			"Error writing hypersnap cast cache:",
+			hash,
+			error instanceof Error ? error.message : JSON.stringify(error),
 		);
 	}
 	return cast;
@@ -265,6 +330,31 @@ export interface HaatzProfile {
 export const getHaatzProfileByFid = async (
 	fid: number,
 ): Promise<HaatzProfile> => {
+	// The node answers EVERY fid here (placeholder profiles for unknown
+	// ones), so every answer is cacheable — no negative form. Same SHORT
+	// TTL and fail-soft cache leg as the cast cache above.
+	const cacheKey = `hyp:profile:${fid}`;
+	let cached: unknown = null;
+	try {
+		cached = await redis().get(cacheKey);
+	} catch (error) {
+		console.error(
+			"Error reading hypersnap profile cache:",
+			fid,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+	}
+	if (cached !== null && cached !== undefined) {
+		const hit = cached as HaatzProfile;
+		if (
+			typeof hit === "object" &&
+			!isHypersnap404(hit) &&
+			("followerCount" in hit || "username" in hit)
+		) {
+			return hit;
+		}
+	}
+
 	const url = `${HYPERSNAP_API_ENDPOINT}/v2/farcaster/user?fid=${fid}`;
 	const res = await fetch(url, {
 		signal: AbortSignal.timeout(HYPERSNAP_TIMEOUT_MS),
@@ -285,7 +375,7 @@ export const getHaatzProfileByFid = async (
 		| { bio?: { text?: unknown } }
 		| undefined;
 
-	return {
+	const answer: HaatzProfile = {
 		username: typeof user.username === "string" ? user.username : null,
 		displayName:
 			typeof user.display_name === "string" ? user.display_name : null,
@@ -298,4 +388,14 @@ export const getHaatzProfileByFid = async (
 		// parseGatewayFid's exactness applies to counts the same way
 		followerCount: parseGatewayFid(user.follower_count) ?? null,
 	};
+	try {
+		await redis().set(cacheKey, answer, { ex: Ttl.SHORT });
+	} catch (error) {
+		console.error(
+			"Error writing hypersnap profile cache:",
+			fid,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+	}
+	return answer;
 };

@@ -10,7 +10,7 @@ import {
 } from "../lib/hydration";
 import { getReverseChronFeed } from "../lib/sqlite";
 import redis, { Ttl } from "../lib/redis";
-import { mapBatch } from "../lib/util";
+import { makeFlightGuard, mapBatch } from "../lib/util";
 import {
 	getChannel,
 	getChannelBannedUsers,
@@ -54,6 +54,11 @@ async function fetchAndHydrateFeed(
 
 	return mapBatch(filteredCasts, hydrateCast, HTTP_FAN_OUT_BATCH_SIZE);
 }
+
+// One background revalidation per cache key at a time. Every cache hit
+// used to fire one, so a client polling a warm channel stacked full feed
+// walks — same shape as castByHash.ts's refreshingFids set.
+const feedRevalidations = makeFlightGuard();
 
 export const postReverseChronFeed = new Elysia().post(
 	"/reverse-chron",
@@ -185,8 +190,12 @@ export const getReverseChronChannelFeed = new Elysia().get(
 
 		// If we have cached data, trigger background revalidation
 		if (cacheResponse) {
-			// Fire and forget background revalidation
+			// Fire and forget background revalidation — at most one per cache
+			// key; duplicate hits while one runs keep the cached answer
 			(async () => {
+				if (!feedRevalidations.tryClaim(cacheKey)) {
+					return;
+				}
 				try {
 					const freshFeed = await fetchAndHydrateFeed(
 						channelId,
@@ -198,6 +207,8 @@ export const getReverseChronChannelFeed = new Elysia().get(
 					});
 				} catch (error) {
 					console.error("Background revalidation failed:", error);
+				} finally {
+					feedRevalidations.release(cacheKey);
 				}
 			})();
 

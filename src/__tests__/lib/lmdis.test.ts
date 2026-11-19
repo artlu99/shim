@@ -88,3 +88,37 @@ describe("LmdisClient error attribution", () => {
 		void server.stop(true);
 	});
 });
+
+// A stalled lmdis (accepts the connection, never answers) used to hang
+// callers forever — and, with cache reads in front of coalesced walks,
+// pin in-flight cast lookups permanently. The per-request deadline turns
+// that into an ordinary Labeled cache-leg failure.
+describe("LmdisClient request deadline", () => {
+	const blackHole = Bun.serve({
+		port: 0,
+		fetch: () => new Promise<Response>(() => {}),
+	});
+
+	test("a stalled server rejects within timeoutMs as a labeled LmdisError", async () => {
+		const client = new LmdisClient({
+			url: `http://localhost:${blackHole.port}`,
+			token: "test-token",
+			timeoutMs: 100,
+		});
+		let thrown: unknown;
+		try {
+			await client.get("any-key");
+			expect.unreachable();
+		} catch (error) {
+			thrown = error;
+		}
+		expect(thrown).toBeInstanceOf(LmdisError);
+		expect((thrown as Error).message).toBe(
+			"lmdis: request timed out after 100ms",
+		);
+	});
+
+	afterAll(() => {
+		void blackHole.stop(true);
+	});
+});
