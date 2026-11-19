@@ -2,8 +2,8 @@
 	"name": "shim",
 	"version": "1.0.0",
 	"scripts": {
-		"dev": "bun run --watch src/index.tsx",
-		"start": "NODE_ENV=production bun src/index.tsx",
+		"dev": "bun run --watch src/shim-service.tsx",
+		"start": "NODE_ENV=production bun --smol src/shim-service.tsx",
 		"test:coverage": "bun test --coverage --coverage-reporter=text",
 		"user:flush": "bun run src/scripts/flush-users.ts"
 	},

@@ -1,6 +1,15 @@
 FROM oven/bun:1-slim
 WORKDIR /app
 
+# The compose healthcheck probes with curl, not bun: a probe that
+# cold-starts a JS runtime every 30s burns CPU/RAM on a box that fights
+# bursts, and a bare exit 1 hides the failure reason that curl prints.
+# oven/bun slim ships without curl — install it here, as root, before
+# the USER switch below.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY package.json bun.lock ./
 RUN bun install --production --frozen-lockfile
 
@@ -25,7 +34,8 @@ ENV SHIM_GIT_SHA=${SHIM_GIT_SHA}
 USER bun
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD bun -e "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-
-CMD ["bun", "src/index.tsx"]
+# No image-level HEALTHCHECK: docker-compose.yml defines both services'
+# probes and overrides this layer's copy anyway — one source of truth.
+# --smol trims JSC's heap growth ambitions (more GC, less RSS ratchet);
+# it is the production posture only — the dev script stays un-smol.
+CMD ["bun", "--smol", "src/shim-service.tsx"]

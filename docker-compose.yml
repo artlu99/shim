@@ -26,13 +26,12 @@ services:
       # SQLite store (casts/follows) — survives container rebuilds and reboots
       - shimdata:/app/data
     healthcheck:
-      test:
-        [
-          "CMD",
-          "bun",
-          "-e",
-          "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
-        ]
+      # single-shot curl: the interval/retries knobs below own the retry
+      # semantics, and curl's exit code + stderr (connection refused vs
+      # HTTP error) show up in `docker inspect`'s health log, where the
+      # old bun -e probe gave a bare exit 1. The lmdis probe below stays
+      # on bun until the lmdis image ships curl.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
       interval: 30s
       timeout: 5s
       start_period: 15s
