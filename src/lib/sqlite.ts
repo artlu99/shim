@@ -152,6 +152,7 @@ export const closeDb = async () => {
 		await dbInstance.destroy();
 		dbInstance = null;
 	}
+	resetInfoCountsCache();
 };
 
 const CURSOR_VERSION = "v1";
@@ -276,8 +277,24 @@ const countOf = (value: unknown): number => {
 export const sqliteFilePath = (): string =>
 	process.env.SQLITE_PATH ?? DEFAULT_SQLITE_PATH;
 
-// Cheap local counts for /info. No username lookups, no top-N scan.
-export const getInfoCounts = async () => {
+export interface InfoCounts {
+	casts: number;
+	liveCasts: number;
+	fids: number;
+}
+
+// Cheap local counts for /info. No username lookups, no top-N scan. But
+// NOT cheap enough to run per-request: these are three full-table scans
+// plus a COUNT(DISTINCT) over the whole corpus — milliseconds on a small
+// store, seconds of synchronous event-loop blockage on a multi-GB one.
+// /info is an ops snapshot, not a ledger: serve the cached value
+// instantly, recompute in the background once stale. Boot-warm via
+// warmInfoCounts() keeps even the first caller fast.
+const INFO_COUNTS_TTL_MS = 60_000;
+let cachedInfoCounts: { value: InfoCounts; at: number } | null = null;
+let revalidatingInfoCounts = false;
+
+const getInfoCountsFresh = async (): Promise<InfoCounts> => {
 	const [casts, liveCasts, fids] = await Promise.all([
 		db()
 			.selectFrom("casts")
@@ -300,6 +317,53 @@ export const getInfoCounts = async () => {
 		liveCasts: countOf(liveCasts?.n),
 		fids: countOf(fids?.n),
 	};
+};
+
+export const getInfoCounts = async (): Promise<InfoCounts> => {
+	if (
+		cachedInfoCounts !== null &&
+		Date.now() - cachedInfoCounts.at <= INFO_COUNTS_TTL_MS
+	) {
+		return cachedInfoCounts.value;
+	}
+	if (cachedInfoCounts !== null) {
+		// stale: answer from cache, recompute in the background — at most
+		// one recompute in flight, and a failed one keeps the old counts
+		// served (they are exactly that: counts)
+		if (!revalidatingInfoCounts) {
+			revalidatingInfoCounts = true;
+			void getInfoCountsFresh()
+				.then((value) => {
+					cachedInfoCounts = { value, at: Date.now() };
+				})
+				.catch((error) => {
+					console.error(
+						"Background info-count recompute failed:",
+						error instanceof Error ? error.message : String(error),
+					);
+				})
+				.finally(() => {
+					revalidatingInfoCounts = false;
+				});
+		}
+		return cachedInfoCounts.value;
+	}
+	// cold: compute on the request path (first call after boot when no
+	// warm() ran, and in tests)
+	const value = await getInfoCountsFresh();
+	cachedInfoCounts = { value, at: Date.now() };
+	return value;
+};
+
+// Deferred from shim-service boot so the first /info never pays the scan.
+export const warmInfoCounts = (): void => {
+	void getInfoCounts();
+};
+
+// Closing the store voids its snapshot — also the test seam for fresh
+// computations after a db switch.
+export const resetInfoCountsCache = (): void => {
+	cachedInfoCounts = null;
 };
 
 export const getLatestCastTimestamps = async (

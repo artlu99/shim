@@ -11,6 +11,7 @@ import {
 	getLatestCastTimestamps,
 	getReverseChronFeed,
 	getStats,
+	resetInfoCountsCache,
 	upsertCasts,
 } from "../../lib/sqlite";
 import type { Cast } from "../../types";
@@ -58,6 +59,47 @@ describe("sqlite store", () => {
 			expect(modified).toBe(0);
 			const modified2 = await upsertCasts(seedCasts(100));
 			expect(modified2).toBe(10);
+		});
+	});
+
+	// /info must never pay three full-table scans per request: the counts
+	// are memoized and served stale while a background recompute runs.
+	describe("getInfoCounts memo", () => {
+		it("computes once and serves the cached object until reset", async () => {
+			resetInfoCountsCache();
+			const first = await getInfoCounts();
+			expect(first.casts).toBe(100); // 90 seeded + 10 new
+			const second = await getInfoCounts();
+			expect(second).toBe(first); // same reference: served from cache
+		});
+
+		it("reset forces a fresh computation", async () => {
+			const cached = await getInfoCounts();
+			resetInfoCountsCache();
+			const fresh = await getInfoCounts();
+			expect(fresh).not.toBe(cached);
+			expect(fresh).toEqual(cached); // db unchanged — values match
+		});
+
+		it("upserts do not leak through the cache within the TTL", async () => {
+			resetInfoCountsCache();
+			const before = await getInfoCounts();
+			// brand-new hashes (seeded range is hash(0..129)) with new fids
+			const fresh = seedCasts(5, 500).map((cast, i) => ({
+				...cast,
+				hash: hash(1000 + i),
+			}));
+			await upsertCasts(fresh);
+			const after = await getInfoCounts(); // served from cache
+			expect(after).toBe(before);
+			resetInfoCountsCache();
+			expect((await getInfoCounts()).casts).toBe(before.casts + 5);
+			// leave the shared db as this test found it — later count tests
+			// assert exact totals
+			const side = new Database(dbPath);
+			side.run("DELETE FROM casts WHERE fid IN (500, 501, 502)");
+			side.close();
+			resetInfoCountsCache();
 		});
 	});
 

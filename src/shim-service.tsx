@@ -18,6 +18,7 @@ import { postRefresh, processFids } from "./routes/refresh";
 import { socialContract } from "./routes/social-contract";
 import { stats } from "./routes/stats";
 import { timestamp } from "./routes/timestamps";
+import { warmInfoCounts } from "./lib/sqlite";
 import { livenessFids } from "./static/artlu";
 
 const port = process.env.PORT || 3000;
@@ -88,6 +89,12 @@ const app = new Elysia()
 		{ detail: { hide: true } },
 	)
 	.listen(port);
+
+// Warm /info's count cache off the request path: the counts are full
+// table scans (seconds on a big corpus), and the first /info after a
+// boot should neither pay them mid-request nor stall a health probe
+// colliding with them. Deferred past the healthcheck's start_period.
+setTimeout(() => warmInfoCounts(), 15_000);
 
 let cachedMarkdown: string | null = null;
 app.get(
