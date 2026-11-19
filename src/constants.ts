@@ -21,7 +21,15 @@ export const MAX_FOLLOWERS = 100;
 // /refresh body fids array is clamped to this by t.Array maxItems — an
 // unauthenticated caller must not drive unbounded hub/gRPC work
 export const MAX_REFRESH_FIDS = 100;
-export const REFRESH_PARALLEL_BATCHES = 20;
+// Fids walked concurrently by processFids. Each fid's walk parses up to
+// MAX_SYNC_MESSAGES messages in 500-message pages on the single JS
+// thread, so this constant is the wave's amplitude: 20-wide left the
+// parser no breathing room on the 2-core VPS — CPU saturated for the
+// whole walk, lmdis starved, cache legs hit their deadline and failed
+// open, and the fail-open traffic re-saturated the core. 4 keeps the
+// same total work at ~1/5 the peak pressure; a full walk takes
+// proportionally longer, which a background seeder does not mind.
+export const REFRESH_PARALLEL_BATCHES = 4;
 
 // getCastsByFid walks pages of CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE until the
 // caller's cap or the hub runs dry. /refresh passes this so a cold fid is not
