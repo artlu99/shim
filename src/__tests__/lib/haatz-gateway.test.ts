@@ -2,6 +2,7 @@ import "./../helpers/hub-env";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import * as hubApi from "../../lib/hub-api";
 import * as sqlite from "../../lib/sqlite";
+import * as warpcast from "../../lib/warpcast";
 
 // fixture trimmed from a live haatz.quilibrium.com /v1/castsByFid answer
 // (2026-11-12); timestamp is hub-time seconds since the Farcaster epoch
@@ -58,22 +59,25 @@ const { gatewayCastToCast, getHaatzCastsByFid, getHaatzChannelFeed } = await imp
 
 let upsertSpy: ReturnType<typeof spyOn>;
 let hydrateSpy: ReturnType<typeof spyOn>;
+let addressSpy: ReturnType<typeof spyOn>;
 
 afterEach(() => {
 	// only the spies this file's tests actually stubbed exist — a restoring
 	// crash in afterEach marks every test in the file failed
 	upsertSpy?.mockRestore();
 	hydrateSpy?.mockRestore();
+	addressSpy?.mockRestore();
 	globalThis.fetch = originalFetch;
 });
 
-// hydrateText resolves mention usernames over the network (hub-api's
-// fork-aware wrapper); stub it there so the mapping tests never leave
-// the process
+// hydrateText resolves a mention through getUserByFid, which asks the
+// fork-aware wrapper and the Warpcast address leg. Stub both so the
+// mapping tests never leave the process.
 const stubHydration = () => {
 	hydrateSpy = spyOn(hubApi, "getUserInEitherWorld").mockImplementation(
 		async (fid: number) => ({ fid, username: `user${fid}` }) as any,
 	);
+	addressSpy = spyOn(warpcast, "getUserPrimaryAddress").mockResolvedValue(null);
 };
 
 describe("gatewayCastToCast", () => {

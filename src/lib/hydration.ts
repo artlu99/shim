@@ -24,7 +24,41 @@ const isCachedUser = (value: unknown): value is User =>
 // coalesce concurrent misses for the same fid into a single fetch
 const inFlight = new Map<number, Promise<User>>();
 
+// Best knowledge of a fid for this process, kept for the same four hours
+// as user:${fid}. A resolved profile lands here even when the lmdis write
+// times out — otherwise the next mention misses, asks Hypersnap again,
+// and a page of casts that share an author becomes one write per cast.
+const USER_MEMORY_MS = Ttl.MEDIUM * 1000;
+const remembered = new Map<number, { user: User; until: number }>();
+
+const rememberedUser = (fid: number): User | undefined => {
+	const entry = remembered.get(fid);
+	if (!entry) {
+		return undefined;
+	}
+	if (Date.now() >= entry.until) {
+		remembered.delete(fid);
+		return undefined;
+	}
+	return entry.user;
+};
+
+const rememberUser = (user: User) => {
+	remembered.set(user.fid, { user, until: Date.now() + USER_MEMORY_MS });
+};
+
+// Tests share this process. A profile remembered by one case must not
+// answer the next.
+export const clearRememberedUsers = () => {
+	remembered.clear();
+};
+
 export const getUserByFid = async (fid: number): Promise<User> => {
+	const known = rememberedUser(fid);
+	if (known) {
+		return stripLegacyProNft(known);
+	}
+
 	const pending = inFlight.get(fid);
 	if (pending) {
 		return stripLegacyProNft(await pending);
@@ -34,7 +68,7 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 		try {
 			const cachedUser = await redis().get<unknown>(`user:${fid}`);
 			if (isCachedUser(cachedUser)) {
-				return cachedUser;
+				return stripLegacyProNft(cachedUser);
 			}
 		} catch (error) {
 			console.error(
@@ -69,7 +103,10 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 		// undefined hub user and undefined primary address are fetch failures
 		// (a real "no address" result is null). Leave those uncached so the
 		// next call retries instead of pinning a blank profile for the TTL.
+		// The process-local copy is taken before the lmdis write: a timeout
+		// there must not forget a profile we already resolved.
 		if (hubUser && primaryAddress !== undefined) {
+			rememberUser(user);
 			try {
 				await redis().set(`user:${fid}`, JSON.stringify(user), {
 					ex: Ttl.MEDIUM,
@@ -138,9 +175,11 @@ export const hydrateText = async (
 	const usernameMentions = await mapBatch(
 		mentions ?? [],
 		async (mention) => {
-			// fork-aware: a mentioned user may exist only in either world
-			const user = await getUserInEitherWorld(mention);
-			return user?.username ?? "<unknown>";
+			// either-world best knowledge, one flight per fid. A page of
+			// casts that mention the same author shares this lookup instead
+			// of each opening the raw Hypersnap documents.
+			const user = await getUserByFid(mention);
+			return user.username ?? "<unknown>";
 		},
 		HTTP_FAN_OUT_BATCH_SIZE,
 	);

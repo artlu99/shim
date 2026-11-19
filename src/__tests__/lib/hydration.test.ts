@@ -24,6 +24,11 @@ let getSentFromBySignerKey: typeof import(
 	"../../lib/hydration"
 ).getSentFromBySignerKey;
 let hydrateText: typeof import("../../lib/hydration").hydrateText;
+let clearRememberedUsers: typeof import(
+	"../../lib/hydration"
+).clearRememberedUsers;
+
+let failUserCacheWrites = false;
 
 // In-memory redis so getUserByFid's cache never touches the real Upstash
 // instance (mocked users must not leak into prod cache or between tests).
@@ -67,6 +72,9 @@ describe("Hydration Functions", () => {
 					return raw === undefined ? null : JSON.parse(raw);
 				},
 				set: async (key: string, value: string) => {
+					if (failUserCacheWrites) {
+						throw new Error("lmdis: request timed out after 5000ms");
+					}
 					userCacheStore.set(key, value);
 					return "OK";
 				},
@@ -83,11 +91,14 @@ describe("Hydration Functions", () => {
 			getUserByFid,
 			getSentFromBySignerKey,
 			hydrateText,
+			clearRememberedUsers,
 		} = await import("../../lib/hydration"));
 	});
 
 	beforeEach(() => {
 		userCacheStore.clear();
+		clearRememberedUsers();
+		failUserCacheWrites = false;
 
 		hubUserSpy.mockReset();
 		primaryAddressSpy.mockReset();
@@ -263,6 +274,32 @@ describe("Hydration Functions", () => {
 			expect(second).toEqual(first);
 		});
 
+		it("remembers a resolved profile when the lmdis write times out", async () => {
+			hubUserSpy.mockResolvedValue({
+				fid: mockFid,
+				username: "testuser",
+				fname: "testuser",
+				attestations: [],
+				displayName: "Test User",
+				pfpUrl: null,
+				bio: null,
+				primaryAddress: null,
+			});
+			primaryAddressSpy.mockResolvedValue(null);
+			failUserCacheWrites = true;
+
+			const first = await getUserByFid(123);
+			expect(userCacheStore.has("user:123")).toBe(false);
+
+			hubUserSpy.mockClear();
+			primaryAddressSpy.mockClear();
+			const second = await getUserByFid(123);
+
+			expect(hubUserSpy).not.toHaveBeenCalled();
+			expect(primaryAddressSpy).not.toHaveBeenCalled();
+			expect(second).toEqual(first);
+		});
+
 		it("should not cache a missing hub user", async () => {
 			hubUserSpy.mockResolvedValue(undefined);
 			primaryAddressSpy.mockResolvedValue(null);
@@ -420,6 +457,20 @@ describe("Hydration Functions", () => {
 			const text = "Hello world!";
 			const result = await hydrateText(text, [], []);
 			expect(result).toBe(text);
+		});
+
+		it("resolves repeated mentions of one fid in a single lookup", async () => {
+			hubUserSpy.mockResolvedValue(mockUser1);
+			primaryAddressSpy.mockResolvedValue(null);
+
+			const [first, second] = await Promise.all([
+				hydrateText("Hello @a", [123], [6]),
+				hydrateText("Hello @b", [123], [6]),
+			]);
+
+			expect(hubUserSpy).toHaveBeenCalledTimes(1);
+			expect(first).toBe("Hello @testuser a");
+			expect(second).toBe("Hello @testuser b");
 		});
 
 		it("should hydrate text with single mention", async () => {
