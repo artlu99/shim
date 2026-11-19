@@ -36,7 +36,7 @@ export const info = new Elysia().get(
 			tags: ["Status"],
 			summary: "Version, resource use, and database counts",
 			description:
-				"Local snapshot of this process. No hub calls, no table scans: casts and liveCasts are the rowid high-water mark — exact inserts since store creation under the append-only write discipline (they drift upward only if rows are deleted out-of-band); fids is a distinct-fid SAMPLE of the latest 50k casts, not the corpus-wide count. sqliteBytes is null for an in-memory store and when the database file is not on disk.",
+				"Local snapshot of this process. No hub calls, no table scans: casts and liveCasts are the rowid high-water mark — exact inserts since store creation under the append-only write discipline (they drift upward only if rows are deleted out-of-band); fids is a distinct-fid sample of the newest 50k casts by timestamp, not the corpus-wide count and not the latest insert batch. sqliteBytes is null for an in-memory store and when the database file is not on disk.",
 		},
 		response: t.Object({
 			version: t.String(),

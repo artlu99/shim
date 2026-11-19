@@ -299,16 +299,21 @@ const RECENT_FIDS_SAMPLE_ROWS = 50_000;
 //   (a conflict-do-nothing upsert consumes no rowid) and nothing
 //   in-app writes deleted_at (casts == liveCasts measured on all three
 //   boxes). An out-of-band deletion drifts these upward — accepted.
-// - fids: DISTINCT fid over the LATEST 50k casts (rowid-descending
-//   seek, milliseconds). A sample, not the corpus-wide distinct count —
-//   that one has no cheap form.
+// - fids: DISTINCT fid over the 50k newest casts by timestamp. The
+//   partial index casts_timestamp_desc_idx is exactly (timestamp DESC)
+//   WHERE deleted_at IS NULL, so this walks 50k index entries and looks
+//   up fid — a fixed sample, at any corpus size. Timestamp order is the
+//   cast clock (values are fixed-width unix-second strings, so
+//   lexicographic DESC is chronological). A backfill appends old casts
+//   at the end of the table; those rows stay out of this window.
+//   A corpus-wide distinct count still has no cheap form.
 export const getInfoCounts = async (): Promise<InfoCounts> => {
 	const [maxRowid, recentFids] = await Promise.all([
 		sql`SELECT MAX(rowid) AS n FROM casts`.execute(db()),
 		sql`SELECT COUNT(DISTINCT fid) AS n FROM (
 				SELECT fid FROM casts
 				WHERE deleted_at IS NULL
-				ORDER BY rowid DESC
+				ORDER BY timestamp DESC
 				LIMIT ${RECENT_FIDS_SAMPLE_ROWS}
 			)`.execute(db()),
 	]);

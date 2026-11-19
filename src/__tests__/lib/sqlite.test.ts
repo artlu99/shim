@@ -61,9 +61,9 @@ describe("sqlite store", () => {
 		});
 	});
 
-	// /info's counts are O(1)-ish: casts/liveCasts ride the rowid
-	// high-water mark (exact under append-only writes), fids is a sample
-	// of the latest casts. No aggregate ever scans the corpus.
+	// /info's counts are bounded: casts/liveCasts ride the rowid
+	// high-water mark (exact under append-only writes), fids is the
+	// authors of the newest casts by timestamp. No aggregate scans the corpus.
 	describe("getInfoCounts", () => {
 		it("tracks inserts via the rowid high-water mark", async () => {
 			const counts = await getInfoCounts();
@@ -96,6 +96,67 @@ describe("sqlite store", () => {
 				hash(99),
 			]);
 			restore.close();
+		});
+
+		it("counts authors of the newest casts, not the latest insert batch", async () => {
+			const samplePath = join(
+				mkdtempSync(join(tmpdir(), "shim-sqlite-fids-")),
+				"fids.sqlite",
+			);
+			await closeDb();
+			process.env.SQLITE_PATH = samplePath;
+			try {
+				await getInfoCounts(); // open the store so the DDL (and the timestamp index) exist
+
+				const side = new Database(samplePath);
+				const insert = side.prepare(
+					"INSERT INTO casts (hash, fid, timestamp) VALUES (?, ?, ?)",
+				);
+				const write = side.transaction(
+					(rows: Array<[string, number, string]>) => {
+						for (const row of rows) insert.run(...row);
+					},
+				);
+				// 50k newest-by-timestamp casts spread across 10 authors, then a
+				// later backfill of one author whose casts are older. Rowid order
+				// would report that one author; timestamp order keeps the 10.
+				write(
+					[...Array(50_000)].map((_, i) => [
+						hash(1_000_000 + i),
+						200 + (i % 10),
+						(1_800_000_000 + i).toString(),
+					]),
+				);
+				write(
+					[...Array(5_000)].map((_, i) => [
+						hash(2_000_000 + i),
+						999,
+						(1_600_000_000 + i).toString(),
+					]),
+				);
+				side.close();
+
+				const plan = new Database(samplePath);
+				const steps = plan
+					.prepare(
+						`EXPLAIN QUERY PLAN
+						 SELECT fid FROM casts
+						 WHERE deleted_at IS NULL
+						 ORDER BY timestamp DESC
+						 LIMIT 50000`,
+					)
+					.all() as Array<{ detail: string }>;
+				plan.close();
+				expect(steps.some((step) => /casts_timestamp_desc_idx/.test(step.detail))).toBe(
+					true,
+				);
+
+				const counts = await getInfoCounts();
+				expect(counts.fids).toBe(10);
+			} finally {
+				await closeDb();
+				process.env.SQLITE_PATH = dbPath;
+			}
 		});
 
 		it("answers zero on an empty store", async () => {
