@@ -46,11 +46,21 @@ services:
     environment:
       LMDIS_REST_TOKEN: ${LMDIS_REST_TOKEN:?set LMDIS_REST_TOKEN in .env}
       LMDB_PATH: /app/data/lmdb
-      # TTL-heavy cache workload: proactive sweep caps disk at a high-water mark
-      LMDIS_SWEEP_INTERVAL_MS: "60000"
+      # TTL-heavy workload: the sweep must retire dead keys faster than
+      # hyp:* churn births them (2026-11-19: 500/60s ≈ 8/s lost the race,
+      # the LMDB file piled up against the memory cap, and the kernel
+      # went into reclaim-thrash on lmdis's mapped pages — cache ops
+      # stalled, cache legs failed open, every failed read became a live
+      # network fetch). 1000/10s ≈ 100/s outruns any observed write rate.
+      LMDIS_SWEEP_INTERVAL_MS: "10000"
+      LMDIS_SWEEP_BATCH: "1000"
     volumes:
       - lmdisdata:/app/data
-    mem_limit: 512m
+    # Headroom for mapped LMDB pages: near the cap the kernel reclaims
+    # pages the process is actively touching (thrash). 512m was sized for
+    # the pre-hyp: workload; 1g restores slack on the 4GB box. The LMDB
+    # file itself never shrinks — the sweep only stops it growing.
+    mem_limit: 1g
     healthcheck:
       # /ready (not /health): verifies LMDB is reachable, 503 until it is
       test:
