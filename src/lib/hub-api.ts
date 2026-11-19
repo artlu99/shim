@@ -1,6 +1,6 @@
 import { fetcher } from "itty-fetcher";
 import { retry, sift } from "radash";
-import { HAATZ_GATEWAY_ENDPOINT, VERBOSE_LOGGING } from "../constants";
+import { HAATZ_GATEWAY_ENDPOINT } from "../constants";
 import type { User } from "../types";
 import type { Hex } from "viem";
 import type {
@@ -19,7 +19,6 @@ import { isNativeFid, parseGatewayFid } from "./util";
 const hub = () => {
 	// 20260905 pop.farcaster.xyz and pow.farcaster.xyz are down
 	// snap.farcaster.xyz and crackle.farcaster.xyz are working
-	VERBOSE_LOGGING && console.log("using crackle.farcaster.xyz");
 	return fetcher({
 		base: "https://crackle.farcaster.xyz:3381",
 		headers: { accept: "application/json" },
