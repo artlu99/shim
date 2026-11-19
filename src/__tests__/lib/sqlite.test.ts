@@ -11,7 +11,6 @@ import {
 	getLatestCastTimestamps,
 	getReverseChronFeed,
 	getStats,
-	resetInfoCountsCache,
 	upsertCasts,
 } from "../../lib/sqlite";
 import type { Cast } from "../../types";
@@ -62,44 +61,55 @@ describe("sqlite store", () => {
 		});
 	});
 
-	// /info must never pay three full-table scans per request: the counts
-	// are memoized and served stale while a background recompute runs.
-	describe("getInfoCounts memo", () => {
-		it("computes once and serves the cached object until reset", async () => {
-			resetInfoCountsCache();
-			const first = await getInfoCounts();
-			expect(first.casts).toBe(100); // 90 seeded + 10 new
-			const second = await getInfoCounts();
-			expect(second).toBe(first); // same reference: served from cache
+	// /info's counts are O(1)-ish: casts/liveCasts ride the rowid
+	// high-water mark (exact under append-only writes), fids is a sample
+	// of the latest casts. No aggregate ever scans the corpus.
+	describe("getInfoCounts", () => {
+		it("tracks inserts via the rowid high-water mark", async () => {
+			const counts = await getInfoCounts();
+			expect(counts.casts).toBe(100); // 90 seeded + 10 new
+			expect(counts.liveCasts).toBe(100);
+			expect(counts.fids).toBe(3); // seedCasts cycles 3 fids
 		});
 
-		it("reset forces a fresh computation", async () => {
-			const cached = await getInfoCounts();
-			resetInfoCountsCache();
-			const fresh = await getInfoCounts();
-			expect(fresh).not.toBe(cached);
-			expect(fresh).toEqual(cached); // db unchanged — values match
-		});
-
-		it("upserts do not leak through the cache within the TTL", async () => {
-			resetInfoCountsCache();
+		it("conflict-do-nothing upserts consume no rowid", async () => {
 			const before = await getInfoCounts();
-			// brand-new hashes (seeded range is hash(0..129)) with new fids
-			const fresh = seedCasts(5, 500).map((cast, i) => ({
-				...cast,
-				hash: hash(1000 + i),
-			}));
-			await upsertCasts(fresh);
-			const after = await getInfoCounts(); // served from cache
-			expect(after).toBe(before);
-			resetInfoCountsCache();
-			expect((await getInfoCounts()).casts).toBe(before.casts + 5);
-			// leave the shared db as this test found it — later count tests
-			// assert exact totals
+			await upsertCasts(seedCasts(30)); // all duplicates
+			const after = await getInfoCounts();
+			expect(after.casts).toBe(before.casts);
+		});
+
+		it("an out-of-band deletion drifts liveCasts — documented, accepted", async () => {
 			const side = new Database(dbPath);
-			side.run("DELETE FROM casts WHERE fid IN (500, 501, 502)");
+			side.run("UPDATE casts SET deleted_at = ? WHERE hash = ?", [
+				ts(99),
+				hash(99),
+			]);
 			side.close();
-			resetInfoCountsCache();
+
+			const counts = await getInfoCounts();
+			expect(counts.casts).toBe(counts.liveCasts); // the drift itself
+
+			// restore — later tests assert exact totals
+			const restore = new Database(dbPath);
+			restore.run("UPDATE casts SET deleted_at = NULL WHERE hash = ?", [
+				hash(99),
+			]);
+			restore.close();
+		});
+
+		it("answers zero on an empty store", async () => {
+			await closeDb();
+			const emptyPath = join(
+				mkdtempSync(join(tmpdir(), "shim-sqlite-empty-")),
+				"empty.sqlite",
+			);
+			process.env.SQLITE_PATH = emptyPath;
+			const counts = await getInfoCounts();
+			expect(counts).toEqual({ casts: 0, liveCasts: 0, fids: 0 });
+			// leave the shared db path in place for the tests after this one
+			await closeDb();
+			process.env.SQLITE_PATH = dbPath;
 		});
 	});
 

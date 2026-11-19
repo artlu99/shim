@@ -6,6 +6,7 @@ import {
 	SqliteAdapter,
 	SqliteIntrospector,
 	SqliteQueryCompiler,
+	sql,
 	type CompiledQuery,
 	type DatabaseConnection,
 	type Dialect,
@@ -152,7 +153,6 @@ export const closeDb = async () => {
 		await dbInstance.destroy();
 		dbInstance = null;
 	}
-	resetInfoCountsCache();
 };
 
 const CURSOR_VERSION = "v1";
@@ -283,87 +283,42 @@ export interface InfoCounts {
 	fids: number;
 }
 
-// Cheap local counts for /info. No username lookups, no top-N scan. But
-// NOT cheap enough to run per-request: these are three full-table scans
-// plus a COUNT(DISTINCT) over the whole corpus — milliseconds on a small
-// store, seconds of synchronous event-loop blockage on a multi-GB one.
-// /info is an ops snapshot, not a ledger: serve the cached value
-// instantly, recompute in the background once stale. Boot-warm via
-// warmInfoCounts() keeps even the first caller fast.
-const INFO_COUNTS_TTL_MS = 60_000;
-let cachedInfoCounts: { value: InfoCounts; at: number } | null = null;
-let revalidatingInfoCounts = false;
+const RECENT_FIDS_SAMPLE_ROWS = 50_000;
 
-const getInfoCountsFresh = async (): Promise<InfoCounts> => {
-	const [casts, liveCasts, fids] = await Promise.all([
-		db()
-			.selectFrom("casts")
-			.select((eb) => eb.fn.countAll().as("n"))
-			.executeTakeFirst(),
-		db()
-			.selectFrom("casts")
-			.select((eb) => eb.fn.countAll().as("n"))
-			.where("deleted_at", "is", null)
-			.executeTakeFirst(),
-		db()
-			.selectFrom("casts")
-			.select((eb) => eb.fn.count("fid").distinct().as("n"))
-			.where("deleted_at", "is", null)
-			.executeTakeFirst(),
-	]);
-
-	return {
-		casts: countOf(casts?.n),
-		liveCasts: countOf(liveCasts?.n),
-		fids: countOf(fids?.n),
-	};
-};
-
+// Counts for /info. No username lookups, no top-N scan, and — this is
+// the part that matters — no aggregate over the corpus. Measured on the
+// fleet (2026-11-19): a single bare COUNT(*) costs 18ms at 396k rows,
+// 180s at 22.8M, and 432s at 23.4M; the old per-request exact queries
+// froze the event loop for that long on the big boxes. SQLite never
+// stores row counts, so an exact live count is always a full scan —
+// which means the question, not the storage, had to change. What
+// replaced it, per number:
+//
+// - casts / liveCasts: MAX(rowid) — an O(log n) B-tree seek, exact
+//   under the fleet's actual write discipline: inserts are append-only
+//   (a conflict-do-nothing upsert consumes no rowid) and nothing
+//   in-app writes deleted_at (casts == liveCasts measured on all three
+//   boxes). An out-of-band deletion drifts these upward — accepted.
+// - fids: DISTINCT fid over the LATEST 50k casts (rowid-descending
+//   seek, milliseconds). A sample, not the corpus-wide distinct count —
+//   that one has no cheap form.
 export const getInfoCounts = async (): Promise<InfoCounts> => {
-	if (
-		cachedInfoCounts !== null &&
-		Date.now() - cachedInfoCounts.at <= INFO_COUNTS_TTL_MS
-	) {
-		return cachedInfoCounts.value;
-	}
-	if (cachedInfoCounts !== null) {
-		// stale: answer from cache, recompute in the background — at most
-		// one recompute in flight, and a failed one keeps the old counts
-		// served (they are exactly that: counts)
-		if (!revalidatingInfoCounts) {
-			revalidatingInfoCounts = true;
-			void getInfoCountsFresh()
-				.then((value) => {
-					cachedInfoCounts = { value, at: Date.now() };
-				})
-				.catch((error) => {
-					console.error(
-						"Background info-count recompute failed:",
-						error instanceof Error ? error.message : String(error),
-					);
-				})
-				.finally(() => {
-					revalidatingInfoCounts = false;
-				});
-		}
-		return cachedInfoCounts.value;
-	}
-	// cold: compute on the request path (first call after boot when no
-	// warm() ran, and in tests)
-	const value = await getInfoCountsFresh();
-	cachedInfoCounts = { value, at: Date.now() };
-	return value;
-};
-
-// Deferred from shim-service boot so the first /info never pays the scan.
-export const warmInfoCounts = (): void => {
-	void getInfoCounts();
-};
-
-// Closing the store voids its snapshot — also the test seam for fresh
-// computations after a db switch.
-export const resetInfoCountsCache = (): void => {
-	cachedInfoCounts = null;
+	const [maxRowid, recentFids] = await Promise.all([
+		sql`SELECT MAX(rowid) AS n FROM casts`.execute(db()),
+		sql`SELECT COUNT(DISTINCT fid) AS n FROM (
+				SELECT fid FROM casts
+				WHERE deleted_at IS NULL
+				ORDER BY rowid DESC
+				LIMIT ${RECENT_FIDS_SAMPLE_ROWS}
+			)`.execute(db()),
+	]);
+	const row = maxRowid.rows[0] as { n: number | null } | undefined;
+	const fidRow = recentFids.rows[0] as { n: number | null } | undefined;
+	return {
+		casts: countOf(row?.n),
+		liveCasts: countOf(row?.n),
+		fids: countOf(fidRow?.n),
+	};
 };
 
 export const getLatestCastTimestamps = async (
