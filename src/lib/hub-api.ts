@@ -123,7 +123,9 @@ const cachedHaatzGet = async <T>(uri: string, ttl: Ttl) => {
 	return res as T;
 };
 
-async function cachedFetcherPaginatedGet<T>(
+async function cachedPaginatedGet<T>(
+	prefix: "hub" | "haatz",
+	getPage: (uri: string) => Promise<PaginatedMessagesResponse<T>>,
 	baseUri: string,
 	ttl: Ttl,
 	pageSize = 100,
@@ -133,9 +135,18 @@ async function cachedFetcherPaginatedGet<T>(
 	const cacheClient = redis();
 	// pageSize/maxPages are part of the key so a capped fetch cannot poison
 	// the cache for full fetches of the same uri
-	const cacheKey = `hub:${baseUri}:${pageSize}:${maxPages}`;
+	const cacheKey = `${prefix}:${baseUri}:${pageSize}:${maxPages}`;
 
-	const cacheResponse = await cacheClient.get(cacheKey);
+	let cacheResponse: unknown;
+	try {
+		cacheResponse = await cacheClient.get(cacheKey);
+	} catch (error) {
+		console.error(
+			`Error reading ${prefix} paginated cache:`,
+			baseUri,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+	}
 
 	if (cacheResponse) {
 		return cacheResponse as T[];
@@ -146,16 +157,13 @@ async function cachedFetcherPaginatedGet<T>(
 
 	for (let i = 0; i < maxPages; i++) {
 		const uri = `${baseUri}${baseUri.includes("?") ? "&" : "?"}pageSize=${pageSize}${nextPageToken ? `&pageToken=${nextPageToken}` : ""}`;
-		const res = await retry(
-			{ backoff: (i) => 10 ** i },
-			async () => {
-				try {
-					return await hub().get<PaginatedMessagesResponse<T>>(uri);
-				} catch (error) {
-					throw hubFailure(uri, error);
-				}
-			},
-		);
+		const res = await retry({ backoff: (i) => 10 ** i }, async () => {
+			try {
+				return await getPage(uri);
+			} catch (error) {
+				throw hubFailure(uri, error);
+			}
+		});
 
 		if (res.messages.length === 0) {
 			break;
@@ -188,13 +196,47 @@ async function cachedFetcherPaginatedGet<T>(
 			await cacheClient.set(cacheKey, JSON.stringify(messages), { ex: ttl });
 		} catch (error) {
 			console.error(
-				"Error caching paginated get:",
+				`Error caching ${prefix} paginated get:`,
 				error instanceof Error ? error.message : JSON.stringify(error),
 			);
 		}
 	}
 
 	return messages;
+}
+
+async function cachedFetcherPaginatedGet<T>(
+	baseUri: string,
+	ttl: Ttl,
+	pageSize = 100,
+	maxPages = 10,
+	shortCircut?: { key: string; value?: string },
+) {
+	return cachedPaginatedGet<T>(
+		"hub",
+		(uri) => hub().get<PaginatedMessagesResponse<T>>(uri),
+		baseUri,
+		ttl,
+		pageSize,
+		maxPages,
+		shortCircut,
+	);
+}
+
+async function cachedHaatzPaginatedGet<T>(
+	baseUri: string,
+	ttl: Ttl,
+	pageSize = 100,
+	maxPages = 10,
+) {
+	return cachedPaginatedGet<T>(
+		"haatz",
+		(uri) => haatz().get<PaginatedMessagesResponse<T>>(uri),
+		baseUri,
+		ttl,
+		pageSize,
+		maxPages,
+	);
 }
 
 /**
@@ -637,63 +679,106 @@ export const getSignersByFid = async (
 	}
 };
 
+// The body typing is a white lie because it was deserialized over http
+// (protobuf JSON emits the protocol enum as its name string, and the
+// address as a 0x-prefixed hex string rather than bytes).
+const ethAddressesFromVerificationMessages = (
+	messages: VerificationAddAddressMessage[],
+): Hex[] => {
+	const addresses = sift(
+		messages.map((m) => {
+			const body = (
+				m as unknown as {
+					data: {
+						verificationAddAddressBody?: {
+							address?: unknown;
+							protocol?: unknown;
+						};
+					};
+				}
+			).data.verificationAddAddressBody;
+			if (
+				!body ||
+				typeof body.address !== "string" ||
+				!/^0x[0-9a-fA-F]{40}$/.test(body.address)
+			) {
+				return undefined;
+			}
+			// protocol may be the explicit enum name or omitted entirely
+			// (protobuf default = PROTOCOL_ETHEREUM); the 0x shape check
+			// above already excludes solana addresses
+			if (
+				body.protocol !== undefined &&
+				body.protocol !== "PROTOCOL_ETHEREUM"
+			) {
+				return undefined;
+			}
+			return body.address.toLowerCase() as Hex;
+		}),
+	);
+	return [...new Set(addresses)];
+};
+
 /**
- * Every ETH address the fid has proven ownership of on the hub, lowercased
- * and deduped. Solana verifications are filtered out. undefined = the hub
- * lookup itself failed; [] = the fid has no ETH verifications. The body
- * typing is a white lie because it was deserialized over http (protobuf
- * JSON emits the protocol enum as its name string, and the address as a
- * 0x-prefixed hex string rather than bytes).
+ * Every ETH address the fid has proven ownership of, lowercased and
+ * deduped. Solana verifications are filtered out. Fork-aware twin of
+ * getUserInEitherWorld: Hypersnap (haatz) is primary; Snapchain (crackle)
+ * is consulted on a clean empty haatz answer or a haatz outage — except
+ * for native fids, which cannot exist on Snapchain. undefined = the
+ * lookup itself failed; [] = the fid has no ETH verifications.
+ *
+ * LONG TTL: verifications barely churn vs profile fields; primary-address
+ * and social-contract share this key, so a longer TTL keeps hub pressure
+ * down when user:${fid} expires at MEDIUM.
  */
 export const getVerifiedEthAddressesByFid = async (
 	fid: number,
 ): Promise<Hex[] | undefined> => {
+	const uri = `/v1/verificationsByFid?fid=${fid}`;
+
+	let haatzAddresses: Hex[] | undefined;
 	try {
-		// LONG: verifications barely churn vs profile fields; primary-address
-		// and social-contract share this key, so a longer TTL keeps hub
-		// pressure down when user:${fid} expires at MEDIUM.
-		const messages = await cachedFetcherPaginatedGet<VerificationAddAddressMessage>(
-			`/v1/verificationsByFid?fid=${fid}`,
-			Ttl.LONG,
+		const messages =
+			await cachedHaatzPaginatedGet<VerificationAddAddressMessage>(
+				uri,
+				Ttl.LONG,
+			);
+		haatzAddresses = ethAddressesFromVerificationMessages(messages);
+		if (haatzAddresses.length > 0) {
+			return haatzAddresses;
+		}
+	} catch (error) {
+		console.error(
+			"getVerifiedEthAddressesByFid: haatz gateway unavailable, falling back to snapchain:",
+			fid,
+			error instanceof Error ? error.message : JSON.stringify(error),
 		);
-		const addresses = sift(
-			messages.map((m) => {
-				const body = (
-					m as unknown as {
-						data: {
-							verificationAddAddressBody?: {
-								address?: unknown;
-								protocol?: unknown;
-							};
-						};
-					}
-				).data.verificationAddAddressBody;
-				if (
-					!body ||
-					typeof body.address !== "string" ||
-					!/^0x[0-9a-fA-F]{40}$/.test(body.address)
-				) {
-					return undefined;
-				}
-				// protocol may be the explicit enum name or omitted entirely
-				// (protobuf default = PROTOCOL_ETHEREUM); the 0x shape check
-				// above already excludes solana addresses
-				if (
-					body.protocol !== undefined &&
-					body.protocol !== "PROTOCOL_ETHEREUM"
-				) {
-					return undefined;
-				}
-				return body.address.toLowerCase() as Hex;
-			}),
-		);
-		return [...new Set(addresses)];
+	}
+
+	// Empty haatz answer or haatz outage. Native fids have no Snapchain
+	// world — return the haatz result ([] = proven none) or undefined
+	// (outage, uncached so the next call retries).
+	if (isNativeFid(fid)) {
+		return haatzAddresses;
+	}
+
+	try {
+		const messages =
+			await cachedFetcherPaginatedGet<VerificationAddAddressMessage>(
+				uri,
+				Ttl.LONG,
+			);
+		return ethAddressesFromVerificationMessages(messages);
 	} catch (error) {
 		console.error(
 			"Error fetching verified eth addresses by fid:",
 			fid,
 			error instanceof Error ? error.message : JSON.stringify(error),
 		);
+		// Empty haatz is only a miss that sent us here — not a proven-none
+		// verdict. A crackle outage must stay undefined so social-contract
+		// and hydration do not cache primaryAddress:null / signed:false
+		// for fids whose verifications live only on Snapchain.
 		return undefined;
 	}
 };
@@ -708,19 +793,13 @@ export interface PrimaryAddress {
 // preference (not on the protocol, and that endpoint rate-limits with
 // "Use hubs instead!"). A Warpcast miss used to leave hydration uncached,
 // so every subsequent request re-hit the public API and amplified 429s.
-// First verified ETH address is the hub-backed answer.
+// First verified ETH address from either world is the hub-backed answer.
 //
 // null = successful lookup with no address;
 // undefined = the lookup itself failed
 export const getUserPrimaryAddress = async (
 	fid: number,
 ): Promise<PrimaryAddress | null | undefined> => {
-	// Native fids cannot have Snapchain verifications — same short-circuit
-	// hydration and social-contract already take.
-	if (isNativeFid(fid)) {
-		return null;
-	}
-
 	const addresses = await getVerifiedEthAddressesByFid(fid);
 	if (addresses === undefined) {
 		return undefined;

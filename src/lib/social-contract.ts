@@ -3,7 +3,6 @@ import { retry } from "radash";
 import type { Hex } from "viem";
 import { getVerifiedEthAddressesByFid } from "./hub-api";
 import redis, { Ttl } from "./redis";
-import { isNativeFid } from "./util";
 
 // Soulbound ERC-721 ("Network School Farcaster client") minted to whichever
 // of a user's verified addresses signed the Farcaster social contract —
@@ -62,21 +61,12 @@ const getSocialContractBalance = async (address: Hex): Promise<bigint> => {
 // coalesce concurrent misses for the same fid into a single lookup
 const inFlight = new Map<number, Promise<boolean>>();
 
-// Every address whose holding proves the fid signed: all ETH addresses the
-// fid has verified on the hub. undefined = hub lookup failed (do not
-// cache a negative); [] = proven none.
+// Every address whose holding proves the fid signed: all ETH addresses
+// the fid has verified on either world (Hypersnap primary). undefined =
+// hub lookup failed (do not cache a negative); [] = proven none.
 const getSigningAddressesForFid = async (
 	fid: number,
-): Promise<Hex[] | undefined> => {
-	// Native fids cannot have legacy-world verifications — the verified
-	// address source here is Snapchain-only and the legacy fid space ends
-	// at 2^32, so the lookup is skippable by construction. [] = proven
-	// none, which caches signed=false without a single outbound call.
-	if (isNativeFid(fid)) {
-		return [];
-	}
-	return getVerifiedEthAddressesByFid(fid);
-};
+): Promise<Hex[] | undefined> => getVerifiedEthAddressesByFid(fid);
 
 // positives are rare (~8 in 10k fids) and the token can be burned, so `true`
 // is cached MEDIUM (new signers are the only way it goes stale)

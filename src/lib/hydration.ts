@@ -2,7 +2,7 @@ import { HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import type { User } from "../types";
 import { getUserInEitherWorld, getUserPrimaryAddress } from "./hub-api";
 import redis, { Ttl } from "./redis";
-import { isNativeFid, mapBatch } from "./util";
+import { mapBatch } from "./util";
 
 // Drop legacy user.proNft from Redis hits written before the field was removed.
 // Also used for nested users inside channelFeed:* cache entries.
@@ -77,13 +77,11 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 			);
 		}
 
-		// Primary address is hub-derived (first verified ETH address). A
-		// native fid has no Snapchain verifications — the fork's fid space
-		// starts past the legacy 2^32 ceiling — so resolve null (a real
-		// "no address", not a fetch failure) and keep the result cacheable.
+		// Primary address is hub-derived (first verified ETH address on
+		// either world — Hypersnap primary, Snapchain on miss/outage).
 		const [hubUser, primaryAddress] = await Promise.all([
 			getUserInEitherWorld(fid),
-			isNativeFid(fid) ? Promise.resolve(null) : getUserPrimaryAddress(fid),
+			getUserPrimaryAddress(fid),
 		]);
 
 		const user: User = {

@@ -39,20 +39,24 @@ afterEach(() => {
 });
 
 describe("hasFidSignedSocialContract: native fids", () => {
-	test("answers false with zero outbound calls — the legacy world cannot know a native fid", async () => {
-		// the verified-address source is Snapchain-only and the signing
-		// check degrades through Base RPC — both predate the fork's
-		// widened fid space. Any fetch means the short-circuit failed.
-		globalThis.fetch = (async (input: any) => {
-			throw new Error(`unexpected fetch: ${String(input)}`);
+	test("asks Hypersnap for verifications and never falls back to Snapchain", async () => {
+		// Native fids can verify on Hypersnap; Snapchain cannot know them.
+		// An empty haatz answer is proven-none — Base RPC is never reached.
+		globalThis.fetch = Object.assign(async (input: any) => {
+			const url = String(input instanceof Request ? input.url : input);
+			if (!url.includes("haatz.quilibrium.com")) {
+				throw new Error(`crackle/Base must not be called, got: ${url}`);
+			}
+			if (!url.includes("verificationsByFid")) {
+				throw new Error(`unexpected fetch: ${url}`);
+			}
+			return Response.json({ messages: [], nextPageToken: "" });
 		}) as unknown as typeof fetch;
 
 		const signed = await hasFidSignedSocialContract(4294967296);
 
 		expect(signed).toBe(false);
 		// the proven-none answer caches MEDIUM, so repeat visits stay free
-		expect(
-			cacheStore.get("social-contract:v2:4294967296"),
-		).toBe("false");
+		expect(cacheStore.get("social-contract:v2:4294967296")).toBe("false");
 	});
 });

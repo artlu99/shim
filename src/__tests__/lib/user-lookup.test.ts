@@ -241,32 +241,37 @@ describe("getUserInEitherWorld: native fids", () => {
 });
 
 describe("getUserPrimaryAddress", () => {
-	test("returns the first verified ETH address from the hub", async () => {
+	const ethVerifications = {
+		messages: [
+			{
+				data: {
+					verificationAddAddressBody: {
+						address: "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01",
+						protocol: "PROTOCOL_ETHEREUM",
+					},
+				},
+			},
+			{
+				data: {
+					verificationAddAddressBody: {
+						address: "0x1111111111111111111111111111111111111111",
+						protocol: "PROTOCOL_ETHEREUM",
+					},
+				},
+			},
+		],
+		nextPageToken: "",
+	};
+
+	test("Hypersnap is primary — a hit never reaches crackle", async () => {
 		stubFetch((url) => {
+			if (!url.includes("haatz.quilibrium.com")) {
+				throw new Error(`crackle must not be called, got: ${url}`);
+			}
 			if (!url.includes("verificationsByFid")) {
 				throw new Error(`unexpected fetch: ${url}`);
 			}
-			return Response.json({
-				messages: [
-					{
-						data: {
-							verificationAddAddressBody: {
-								address: "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01",
-								protocol: "PROTOCOL_ETHEREUM",
-							},
-						},
-					},
-					{
-						data: {
-							verificationAddAddressBody: {
-								address: "0x1111111111111111111111111111111111111111",
-								protocol: "PROTOCOL_ETHEREUM",
-							},
-						},
-					},
-				],
-				nextPageToken: "",
-			});
+			return Response.json(ethVerifications);
 		});
 
 		const result = await getUserPrimaryAddress(2);
@@ -277,7 +282,24 @@ describe("getUserPrimaryAddress", () => {
 		});
 	});
 
-	test("returns null when the fid has no ETH verifications", async () => {
+	test("a clean Hypersnap miss consults crackle for legacy fids", async () => {
+		stubFetch((url) => {
+			if (url.includes("haatz.quilibrium.com")) {
+				return Response.json({ messages: [], nextPageToken: "" });
+			}
+			if (!url.includes("verificationsByFid")) {
+				throw new Error(`unexpected fetch: ${url}`);
+			}
+			return Response.json(ethVerifications);
+		});
+
+		const result = await getUserPrimaryAddress(2);
+		expect(result?.address).toBe(
+			"0xabcdef0123456789abcdef0123456789abcdef01",
+		);
+	});
+
+	test("returns null when neither world has ETH verifications", async () => {
 		stubFetch((url) => {
 			if (!url.includes("verificationsByFid")) {
 				throw new Error(`unexpected fetch: ${url}`);
@@ -288,11 +310,37 @@ describe("getUserPrimaryAddress", () => {
 		expect(await getUserPrimaryAddress(9999999)).toBeNull();
 	});
 
-	test("returns null for native fids without calling the hub", async () => {
+	test("an empty Hypersnap answer plus crackle outage stays undefined", async () => {
 		stubFetch((url) => {
-			throw new Error(`unexpected fetch: ${url}`);
+			if (url.includes("haatz.quilibrium.com")) {
+				return Response.json({ messages: [], nextPageToken: "" });
+			}
+			return new Response("internal error", { status: 500 });
+		});
+
+		// must not pin [] — Snapchain may hold the only verifications
+		expect(await getUserPrimaryAddress(2)).toBeUndefined();
+	});
+
+	test("native fids resolve from Hypersnap alone — crackle is never consulted", async () => {
+		stubFetch((url) => {
+			if (!url.includes("haatz.quilibrium.com")) {
+				throw new Error(`crackle must not be called, got: ${url}`);
+			}
+			return Response.json({ messages: [], nextPageToken: "" });
 		});
 
 		expect(await getUserPrimaryAddress(2 ** 32)).toBeNull();
+	});
+
+	test("a Hypersnap outage for a native fid stays undefined, not a crackle answer", async () => {
+		stubFetch((url) => {
+			if (url.includes("haatz.quilibrium.com")) {
+				return new Response("internal error", { status: 500 });
+			}
+			throw new Error(`crackle must not be called, got: ${url}`);
+		});
+
+		expect(await getUserPrimaryAddress(2 ** 32)).toBeUndefined();
 	});
 });
