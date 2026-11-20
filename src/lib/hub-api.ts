@@ -476,8 +476,8 @@ export const getHubUserByFid = async (
  * mappers. undefined is a clean miss (both calls answered empty — the
  * live-verified unknown-fid shape); a gateway failure THROWS so the
  * fork-aware caller can withhold the verdict. primaryAddress is null
- * here — it comes from the Warpcast backend, not the hub, same as the
- * Snapchain leg.
+ * here — hydration fills it from hub verifications (first ETH address)
+ * after this returns, same as the Snapchain leg.
  */
 export const getHaatzUserByFid = async (
 	fid: number,
@@ -649,9 +649,12 @@ export const getVerifiedEthAddressesByFid = async (
 	fid: number,
 ): Promise<Hex[] | undefined> => {
 	try {
+		// LONG: verifications barely churn vs profile fields; primary-address
+		// and social-contract share this key, so a longer TTL keeps hub
+		// pressure down when user:${fid} expires at MEDIUM.
 		const messages = await cachedFetcherPaginatedGet<VerificationAddAddressMessage>(
 			`/v1/verificationsByFid?fid=${fid}`,
-			Ttl.MEDIUM,
+			Ttl.LONG,
 		);
 		const addresses = sift(
 			messages.map((m) => {
@@ -693,6 +696,40 @@ export const getVerifiedEthAddressesByFid = async (
 		);
 		return undefined;
 	}
+};
+
+export interface PrimaryAddress {
+	fid: number;
+	protocol: "ethereum";
+	address: Hex;
+}
+
+// On-protocol stand-in for the old api.farcaster.xyz /fc/primary-address
+// preference (not on the protocol, and that endpoint rate-limits with
+// "Use hubs instead!"). A Warpcast miss used to leave hydration uncached,
+// so every subsequent request re-hit the public API and amplified 429s.
+// First verified ETH address is the hub-backed answer.
+//
+// null = successful lookup with no address;
+// undefined = the lookup itself failed
+export const getUserPrimaryAddress = async (
+	fid: number,
+): Promise<PrimaryAddress | null | undefined> => {
+	// Native fids cannot have Snapchain verifications — same short-circuit
+	// hydration and social-contract already take.
+	if (isNativeFid(fid)) {
+		return null;
+	}
+
+	const addresses = await getVerifiedEthAddressesByFid(fid);
+	if (addresses === undefined) {
+		return undefined;
+	}
+	const address = addresses[0];
+	if (!address) {
+		return null;
+	}
+	return { fid, protocol: "ethereum", address };
 };
 
 export const getStorageByFid = async (fid: number) => {

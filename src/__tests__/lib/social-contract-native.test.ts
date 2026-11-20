@@ -41,9 +41,8 @@ afterEach(() => {
 describe("hasFidSignedSocialContract: native fids", () => {
 	test("answers false with zero outbound calls — the legacy world cannot know a native fid", async () => {
 		// the verified-address source is Snapchain-only and the signing
-		// check degrades through Warpcast/Base RPC — every one of those
-		// worlds predates the fork's widened fid space. Any fetch means the
-		// short-circuit failed.
+		// check degrades through Base RPC — both predate the fork's
+		// widened fid space. Any fetch means the short-circuit failed.
 		globalThis.fetch = (async (input: any) => {
 			throw new Error(`unexpected fetch: ${String(input)}`);
 		}) as unknown as typeof fetch;

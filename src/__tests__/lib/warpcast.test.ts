@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import {
-	getUserPrimaryAddress,
 	getChannel,
 	getChannelIdFromUrl,
 	getChannelBannedUsers,
@@ -8,31 +7,6 @@ import {
 import { exceptions } from "../../static/channel-exceptions";
 
 describe("Warpcast API", () => {
-	describe("getUserPrimaryAddress", () => {
-		it("should get user primary address for known users", async () => {
-			// Test with known FIDs that likely have primary addresses
-			const testCases = [2, 3, 1689]; // varun, dwr, stephancill
-
-			for (const fid of testCases) {
-				const result = await getUserPrimaryAddress(fid);
-
-				// Should return either an address object or null/undefined
-				expect(
-					result === null ||
-						result === undefined ||
-						(typeof result === "object" && result.fid === fid),
-				).toBe(true);
-			}
-		});
-
-		it("should handle non-existent users", async () => {
-			const result = await getUserPrimaryAddress(9999999);
-
-			// Should return null or undefined for non-existent users
-			expect(result === null || result === undefined).toBe(true);
-		});
-	});
-
 	describe("getChannel", () => {
 		it("should get channel for known channel IDs", async () => {
 			// Test with some known channel IDs from the exceptions

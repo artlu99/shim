@@ -2,7 +2,6 @@ import "./../helpers/hub-env";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import * as hubApi from "../../lib/hub-api";
 import * as sqlite from "../../lib/sqlite";
-import * as warpcast from "../../lib/warpcast";
 
 // fixture trimmed from a live haatz.quilibrium.com /v1/castsByFid answer
 // (2026-11-12); timestamp is hub-time seconds since the Farcaster epoch
@@ -71,13 +70,13 @@ afterEach(() => {
 });
 
 // hydrateText resolves a mention through getUserByFid, which asks the
-// fork-aware wrapper and the Warpcast address leg. Stub both so the
+// fork-aware wrapper and the hub primary-address leg. Stub both so the
 // mapping tests never leave the process.
 const stubHydration = () => {
 	hydrateSpy = spyOn(hubApi, "getUserInEitherWorld").mockImplementation(
 		async (fid: number) => ({ fid, username: `user${fid}` }) as any,
 	);
-	addressSpy = spyOn(warpcast, "getUserPrimaryAddress").mockResolvedValue(null);
+	addressSpy = spyOn(hubApi, "getUserPrimaryAddress").mockResolvedValue(null);
 };
 
 describe("gatewayCastToCast", () => {

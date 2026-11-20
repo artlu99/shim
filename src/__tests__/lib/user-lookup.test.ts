@@ -31,9 +31,11 @@ afterAll(() => {
 	mock.module("../../lib/redis", () => originalRedis);
 });
 
-const { getHaatzUserByFid, getUserInEitherWorld } = await import(
-	"../../lib/hub-api"
-);
+const {
+	getHaatzUserByFid,
+	getUserInEitherWorld,
+	getUserPrimaryAddress,
+} = await import("../../lib/hub-api");
 
 // fixtures in the gateway's protobuf-JSON shape (white-lie typing — these
 // arrive deserialized over http)
@@ -117,7 +119,7 @@ describe("getHaatzUserByFid", () => {
 		expect(user?.fname).toBe("haatzuser"); // newest fname proof
 		expect(user?.attestations).toEqual(["haatzuser.eth"]); // the ENS proof
 		expect(user?.displayName).toBe("Haatz User");
-		expect(user?.primaryAddress).toBeNull(); // comes from Warpcast, not the hub
+		expect(user?.primaryAddress).toBeNull(); // hydration fills from verifications
 	});
 
 	test("an empty answer is a clean miss", async () => {
@@ -235,5 +237,62 @@ describe("getUserInEitherWorld: native fids", () => {
 		});
 
 		expect(await getUserInEitherWorld(NATIVE_FID)).toBeUndefined();
+	});
+});
+
+describe("getUserPrimaryAddress", () => {
+	test("returns the first verified ETH address from the hub", async () => {
+		stubFetch((url) => {
+			if (!url.includes("verificationsByFid")) {
+				throw new Error(`unexpected fetch: ${url}`);
+			}
+			return Response.json({
+				messages: [
+					{
+						data: {
+							verificationAddAddressBody: {
+								address: "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01",
+								protocol: "PROTOCOL_ETHEREUM",
+							},
+						},
+					},
+					{
+						data: {
+							verificationAddAddressBody: {
+								address: "0x1111111111111111111111111111111111111111",
+								protocol: "PROTOCOL_ETHEREUM",
+							},
+						},
+					},
+				],
+				nextPageToken: "",
+			});
+		});
+
+		const result = await getUserPrimaryAddress(2);
+		expect(result).toEqual({
+			fid: 2,
+			protocol: "ethereum",
+			address: "0xabcdef0123456789abcdef0123456789abcdef01",
+		});
+	});
+
+	test("returns null when the fid has no ETH verifications", async () => {
+		stubFetch((url) => {
+			if (!url.includes("verificationsByFid")) {
+				throw new Error(`unexpected fetch: ${url}`);
+			}
+			return Response.json({ messages: [], nextPageToken: "" });
+		});
+
+		expect(await getUserPrimaryAddress(9999999)).toBeNull();
+	});
+
+	test("returns null for native fids without calling the hub", async () => {
+		stubFetch((url) => {
+			throw new Error(`unexpected fetch: ${url}`);
+		});
+
+		expect(await getUserPrimaryAddress(2 ** 32)).toBeNull();
 	});
 });

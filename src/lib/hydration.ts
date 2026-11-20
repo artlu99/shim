@@ -1,9 +1,8 @@
 import { HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import type { User } from "../types";
-import { getUserInEitherWorld } from "./hub-api";
+import { getUserInEitherWorld, getUserPrimaryAddress } from "./hub-api";
 import redis, { Ttl } from "./redis";
 import { isNativeFid, mapBatch } from "./util";
-import { getUserPrimaryAddress } from "./warpcast";
 
 // Drop legacy user.proNft from Redis hits written before the field was removed.
 // Also used for nested users inside channelFeed:* cache entries.
@@ -78,10 +77,10 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 			);
 		}
 
-		// A native fid has no Warpcast backend identity — the fork's fid
-		// space starts past the backend's 2^32 ceiling — so the call would
-		// be doomed. Resolving null (a real "no address", not a fetch
-		// failure) keeps the result cacheable below.
+		// Primary address is hub-derived (first verified ETH address). A
+		// native fid has no Snapchain verifications — the fork's fid space
+		// starts past the legacy 2^32 ceiling — so resolve null (a real
+		// "no address", not a fetch failure) and keep the result cacheable.
 		const [hubUser, primaryAddress] = await Promise.all([
 			getUserInEitherWorld(fid),
 			isNativeFid(fid) ? Promise.resolve(null) : getUserPrimaryAddress(fid),

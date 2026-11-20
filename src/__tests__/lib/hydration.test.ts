@@ -12,7 +12,6 @@ import * as hubApi from "../../lib/hub-api";
 // Snapshot the real exports before mock.module. The namespace is a live
 // binding, so passing it back in afterAll would reinstall the mock.
 import * as realRedis from "../../lib/redis";
-import * as warpcast from "../../lib/warpcast";
 
 const originalRedis = {
 	default: realRedis.default,
@@ -61,7 +60,7 @@ const mockUser2 = {
 // Create spies that we can configure per test. hydration goes through the
 // fork-aware wrapper now, so the direct dependency is the wrapper.
 const hubUserSpy = spyOn(hubApi, "getUserInEitherWorld");
-const primaryAddressSpy = spyOn(warpcast, "getUserPrimaryAddress");
+const primaryAddressSpy = spyOn(hubApi, "getUserPrimaryAddress");
 
 describe("Hydration Functions", () => {
 	beforeAll(async () => {
@@ -361,7 +360,7 @@ describe("Hydration Functions", () => {
 			expect(result).not.toHaveProperty("proNft");
 		});
 
-		it("skips the doomed Warpcast primary-address call for native fids", async () => {
+		it("skips the doomed primary-address lookup for native fids", async () => {
 			const nativeFid = 2 ** 32;
 			hubUserSpy.mockResolvedValue({
 				fid: nativeFid,

@@ -1,6 +1,5 @@
 import { fetcher } from "itty-fetcher";
 import { retry } from "radash";
-import type { Hex } from "viem";
 import { exceptions } from "../static/channel-exceptions";
 import type { Channel } from "../types";
 import redis, { Ttl } from "./redis";
@@ -25,6 +24,11 @@ const warpcastFailure = (uri: string, error: unknown): Error => {
 	}
 	return new Error(`warpcast ${uri}${status}: ${JSON.stringify(error)}`);
 };
+
+const statusOf = (error: unknown): unknown =>
+	typeof error === "object" && error !== null && "status" in error
+		? (error as { status: unknown }).status
+		: undefined;
 
 export interface FullChannel {
 	id: string;
@@ -82,24 +86,25 @@ const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 		return cacheResponse as T;
 	}
 
-	const res = await retry({ backoff: (i) => 10 ** i }, async () => {
+	const res = await retry({ backoff: (i) => 10 ** i }, async (exit) => {
 		try {
 			return await warpcastApi.get(uri);
 		} catch (error) {
-			// 404 = "not found" (no primary address, no channel): cache the
-			// sentinel and return null. itty-fetcher's errors are NOT Error
+			// 404 = "not found" (no channel / no bans): cache the sentinel
+			// and return null. itty-fetcher's errors are NOT Error
 			// instances in this runtime (AGENTS.md), so the original
 			// `error instanceof Error` form never engaged — every miss
 			// retried 4x, was left uncached, and refetched on every request.
 			// Detect via the status property.
-			if (
-				typeof error === "object" &&
-				error !== null &&
-				"status" in error &&
-				(error as { status: unknown }).status === 404
-			) {
+			if (statusOf(error) === 404) {
 				await cacheClient.set(cacheKey, NOT_FOUND, { ex: ttl });
 				return null;
+			}
+			// 429 is not transient — the public API tells callers to use
+			// hubs, and radash's 1/10/100ms backoff only amplifies the
+			// throttle. exit() aborts the retry loop immediately.
+			if (statusOf(error) === 429) {
+				exit(warpcastFailure(uri, error));
 			}
 			// For other errors, label the warpcast leg and let retry handle it
 			throw warpcastFailure(uri, error);
@@ -113,39 +118,6 @@ const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 	}
 
 	return res as T;
-};
-
-export interface PrimaryAddress {
-	fid: number;
-	protocol: "ethereum";
-	address: Hex;
-}
-
-// null = successful lookup with no address (404 is cached);
-// undefined = the lookup itself failed
-export const getUserPrimaryAddress = async (
-	fid: number,
-): Promise<PrimaryAddress | null | undefined> => {
-	try {
-		const res = await cachedFetcherGet<{
-			result: {
-				address: {
-					fid: number;
-					protocol: "ethereum";
-					address: Hex;
-				};
-			};
-		}>(`/fc/primary-address?fid=${fid}&protocol=ethereum`, Ttl.MEDIUM);
-
-		return res?.result?.address ?? null;
-	} catch (error) {
-		console.error(
-			"Error fetching user primary address for fid:",
-			fid,
-			error instanceof Error ? error : JSON.stringify(error),
-		);
-		return undefined;
-	}
 };
 
 export const getChannel = async (

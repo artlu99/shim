@@ -4,7 +4,6 @@ import type { Hex } from "viem";
 import { getVerifiedEthAddressesByFid } from "./hub-api";
 import redis, { Ttl } from "./redis";
 import { isNativeFid } from "./util";
-import { getUserPrimaryAddress } from "./warpcast";
 
 // Soulbound ERC-721 ("Network School Farcaster client") minted to whichever
 // of a user's verified addresses signed the Farcaster social contract —
@@ -64,26 +63,19 @@ const getSocialContractBalance = async (address: Hex): Promise<bigint> => {
 const inFlight = new Map<number, Promise<boolean>>();
 
 // Every address whose holding proves the fid signed: all ETH addresses the
-// fid has verified on the hub, falling back to the Warpcast primary address
-// alone when the hub lookup fails.
-const getSigningAddressesForFid = async (fid: number): Promise<Hex[]> => {
+// fid has verified on the hub. undefined = hub lookup failed (do not
+// cache a negative); [] = proven none.
+const getSigningAddressesForFid = async (
+	fid: number,
+): Promise<Hex[] | undefined> => {
 	// Native fids cannot have legacy-world verifications — the verified
 	// address source here is Snapchain-only and the legacy fid space ends
-	// at 2^32, so both the lookup and the doomed primary-address fallback
-	// below are skippable by construction. [] = proven none, which caches
-	// signed=false without a single outbound call.
+	// at 2^32, so the lookup is skippable by construction. [] = proven
+	// none, which caches signed=false without a single outbound call.
 	if (isNativeFid(fid)) {
 		return [];
 	}
-	const verified = await getVerifiedEthAddressesByFid(fid);
-	// undefined = hub lookup failed → degrade to the single primary address.
-	// [] = genuinely no verifications → stop there: a primary address is
-	// derived from verifications, so looking it up would be a doomed call.
-	if (verified !== undefined) {
-		return verified;
-	}
-	const primaryAddress = await getUserPrimaryAddress(fid);
-	return primaryAddress?.address ? [primaryAddress.address] : [];
+	return getVerifiedEthAddressesByFid(fid);
 };
 
 // positives are rare (~8 in 10k fids) and the token can be burned, so `true`
@@ -116,9 +108,14 @@ export const hasFidSignedSocialContract = async (
 		}
 
 		const addresses = await getSigningAddressesForFid(fid);
+		// Hub outage: answer false for this request but leave uncached so
+		// the next call retries — same guard hydration uses for undefined
+		// primaryAddress (a cached false would false-negative for 4h).
+		if (addresses === undefined) {
+			return false;
+		}
 		if (addresses.length === 0) {
-			// no wallet attached (no verifications / lookup 404): cannot have
-			// signed. MEDIUM bounds staleness if the lookup itself was flaky.
+			// no wallet attached (no verifications): cannot have signed.
 			const signed = false;
 			try {
 				await cacheClient.set(
