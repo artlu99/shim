@@ -41,7 +41,7 @@ export const REFRESH_PARALLEL_BATCHES =
 // getCastsByFid walks pages of CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE until the
 // caller's cap or the hub runs dry. /refresh passes this so a cold fid is not
 // sealed after a single page. Every caller is clamped to it.
-export const MAX_SYNC_MESSAGES = 10000;
+export const MAX_SYNC_MESSAGES = 2000;
 
 // hub rpc
 export const HUB_RPC_DEADLINE_MS = 10_000;
@@ -50,6 +50,13 @@ export const HUB_RPC_DEADLINE_MS = 10_000;
 // stats usernames) go through mapBatch in chunks of this size instead of
 // one unbounded Promise.all
 export const HTTP_FAN_OUT_BATCH_SIZE = 20;
+
+// /reverse-chron: same fid-array discipline as /refresh, plus a hard page
+// ceiling so one POST cannot drive unbounded dual-world lookups
+export const MAX_REVERSE_CHRON_LIMIT = 100;
+
+// process-local remembered-user map — same entry budget as HotCache
+export const REMEMBERED_USER_MAX_ENTRIES = 512;
 
 // Hypersnap (Quilibrium's Snapchain fork) serves a Warpcast-client-shaped
 // HTTP API on the node. Its /v2/farcaster/cast?type=hash endpoint is the

@@ -299,6 +299,70 @@ describe("Hydration Functions", () => {
 			expect(second).toEqual(first);
 		});
 
+		it("soft-degrades when getUserInEitherWorld throws an outage", async () => {
+			hubUserSpy.mockRejectedValue(new Error("user lookup outage for fid 123"));
+			primaryAddressSpy.mockResolvedValue(null);
+
+			const result = await getUserByFid(123);
+
+			expect(result).toEqual({
+				fid: 123,
+				username: null,
+				fname: null,
+				attestations: [],
+				displayName: null,
+				pfpUrl: null,
+				bio: null,
+				primaryAddress: null,
+			});
+			expect(userCacheStore.has("user:123")).toBe(false);
+		});
+
+		it("evicts the oldest remembered profile once the entry cap is hit", async () => {
+			const { REMEMBERED_USER_MAX_ENTRIES } = await import(
+				"../../constants"
+			);
+			primaryAddressSpy.mockResolvedValue(null);
+			hubUserSpy.mockImplementation(async (fid: number) => ({
+				fid,
+				username: `u${fid}`,
+				fname: `u${fid}`,
+				attestations: [],
+				displayName: null,
+				pfpUrl: null,
+				bio: null,
+				primaryAddress: null,
+			}));
+
+			for (let fid = 1; fid <= REMEMBERED_USER_MAX_ENTRIES; fid++) {
+				await getUserByFid(fid);
+			}
+			// capacity full — next insert must drop the LRU (fid 1)
+			await getUserByFid(REMEMBERED_USER_MAX_ENTRIES + 1);
+
+			userCacheStore.clear();
+			hubUserSpy.mockClear();
+			primaryAddressSpy.mockClear();
+			hubUserSpy.mockImplementation(async (fid: number) => ({
+				fid,
+				username: `u${fid}`,
+				fname: `u${fid}`,
+				attestations: [],
+				displayName: null,
+				pfpUrl: null,
+				bio: null,
+				primaryAddress: null,
+			}));
+			primaryAddressSpy.mockResolvedValue(null);
+
+			await getUserByFid(1);
+			expect(hubUserSpy).toHaveBeenCalledWith(1);
+
+			hubUserSpy.mockClear();
+			await getUserByFid(REMEMBERED_USER_MAX_ENTRIES + 1);
+			expect(hubUserSpy).not.toHaveBeenCalled();
+		});
+
 		it("should not cache a missing hub user", async () => {
 			hubUserSpy.mockResolvedValue(undefined);
 			primaryAddressSpy.mockResolvedValue(null);

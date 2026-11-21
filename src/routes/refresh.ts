@@ -91,12 +91,27 @@ export const postRefresh = new Elysia().post(
 				};
 			}
 			// refresh only consumes the first MAX_FOLLOWERS entries, so one page
-			// of 1000 covers it without pulling the whole following graph
-			const following = await getFollowingByFid(fid, 1);
-			for (const followingFid of following.slice(0, MAX_FOLLOWERS)) {
-				allFids.add(followingFid);
-			}
+			// of 1000 covers it without pulling the whole following graph.
+			// Fork-aware: Hypersnap primary. An outage is not "follows nobody"
+			// — still sync the named fid alone and say so in the message.
 			allFids.add(fid);
+			try {
+				const following = await getFollowingByFid(fid, 1);
+				for (const followingFid of following.slice(0, MAX_FOLLOWERS)) {
+					allFids.add(followingFid);
+				}
+			} catch (error) {
+				console.error(
+					"postRefresh: following lookup outage:",
+					fid,
+					error instanceof Error ? error.message : JSON.stringify(error),
+				);
+				const res = await processFids(Array.from(allFids));
+				return {
+					...res,
+					message: "following lookup outage; refreshed username fid only",
+				};
+			}
 		}
 
 		const res = await processFids(Array.from(allFids));

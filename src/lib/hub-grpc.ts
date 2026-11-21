@@ -12,6 +12,7 @@ import {
 	FARCASTER_EPOCH,
 	FEED_DEFAULT_PAGE_SIZE,
 	HUB_RPC_DEADLINE_MS,
+	HTTP_FAN_OUT_BATCH_SIZE,
 	MAX_SYNC_MESSAGES,
 	VERBOSE_LOGGING,
 } from "../constants";
@@ -22,7 +23,7 @@ import type { CastAddMessage } from "./farcaster-types";
 import { hydrateText } from "./hydration";
 import { upsertCasts } from "./sqlite";
 import redis, { Ttl } from "./redis";
-import { hexToUint8Array, uin8ArrayToHex } from "./util";
+import { hexToUint8Array, mapBatch, uin8ArrayToHex } from "./util";
 
 const DO_STREAM = false;
 
@@ -340,7 +341,10 @@ export const getCastsByFid = async (
 			}),
 		);
 
-		const casts = sift(await Promise.all(res.map(getCastFromAddMessage)));
+		// hydrateText fans out per mention — bound the page wave like feeds do
+		const casts = sift(
+			await mapBatch(res, getCastFromAddMessage, HTTP_FAN_OUT_BATCH_SIZE),
+		);
 		console.log(`got ${casts.length} casts from rpc for fid ${fid}`);
 
 		let numNew = 0;
@@ -402,7 +406,9 @@ export const rawChannelFeed = async (
 				return undefined;
 			}),
 		);
-		casts = sift(await Promise.all(res.map(getCastFromAddMessage)));
+		casts = sift(
+			await mapBatch(res, getCastFromAddMessage, HTTP_FAN_OUT_BATCH_SIZE),
+		);
 		VERBOSE_LOGGING &&
 			console.log(
 				`got ${casts.length} casts from rpc for parentUrl ${parentUrl}`,

@@ -1,8 +1,10 @@
 import { fetcher } from "itty-fetcher";
 import { retry } from "radash";
 import type { Hex } from "viem";
+import { HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
 import { getVerifiedEthAddressesByFid } from "./hub-api";
 import redis, { Ttl } from "./redis";
+import { mapBatch } from "./util";
 
 // Soulbound ERC-721 ("Network School Farcaster client") minted to whichever
 // of a user's verified addresses signed the Farcaster social contract —
@@ -123,8 +125,10 @@ export const hasFidSignedSocialContract = async (
 			return signed;
 		}
 
-		const balances = await Promise.all(
-			addresses.map((address) => getSocialContractBalance(address)),
+		const balances = await mapBatch(
+			addresses,
+			getSocialContractBalance,
+			HTTP_FAN_OUT_BATCH_SIZE,
 		);
 		const signed = balances.some((balance) => balance > 0n);
 		try {

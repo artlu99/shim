@@ -1,4 +1,7 @@
-import { HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
+import {
+	HTTP_FAN_OUT_BATCH_SIZE,
+	REMEMBERED_USER_MAX_ENTRIES,
+} from "../constants";
 import type { User } from "../types";
 import { getUserInEitherWorld, getUserPrimaryAddress } from "./hub-api";
 import redis, { Ttl } from "./redis";
@@ -27,6 +30,8 @@ const inFlight = new Map<number, Promise<User>>();
 // as user:${fid}. A resolved profile lands here even when the lmdis write
 // times out — otherwise the next mention misses, asks Hypersnap again,
 // and a page of casts that share an author becomes one write per cast.
+// Capped like HotCache: a wide feed / mention storm must not retain
+// unbounded profiles in-process for the TTL.
 const USER_MEMORY_MS = Ttl.MEDIUM * 1000;
 const remembered = new Map<number, { user: User; until: number }>();
 
@@ -39,10 +44,33 @@ const rememberedUser = (fid: number): User | undefined => {
 		remembered.delete(fid);
 		return undefined;
 	}
+	// Map insertion order is recency — re-insert on hit so eviction drops LRU
+	remembered.delete(fid);
+	remembered.set(fid, entry);
 	return entry.user;
 };
 
+const evictRemembered = () => {
+	const now = Date.now();
+	for (const [fid, entry] of remembered) {
+		if (now >= entry.until) {
+			remembered.delete(fid);
+		}
+		if (remembered.size < REMEMBERED_USER_MAX_ENTRIES) {
+			return;
+		}
+	}
+	const oldest = remembered.keys().next();
+	if (!oldest.done) {
+		remembered.delete(oldest.value);
+	}
+};
+
 const rememberUser = (user: User) => {
+	remembered.delete(user.fid);
+	if (remembered.size >= REMEMBERED_USER_MAX_ENTRIES) {
+		evictRemembered();
+	}
 	remembered.set(user.fid, { user, until: Date.now() + USER_MEMORY_MS });
 };
 
@@ -79,8 +107,18 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 
 		// Primary address is hub-derived (first verified ETH address on
 		// either world — Hypersnap primary, Snapchain on miss/outage).
+		// getUserInEitherWorld throws on a native-fid Hypersnap outage so
+		// direct callers can 503; here we soft-degrade to a blank uncached
+		// profile so mention hydration does not abort a whole cast page.
 		const [hubUser, primaryAddress] = await Promise.all([
-			getUserInEitherWorld(fid),
+			getUserInEitherWorld(fid).catch((error) => {
+				console.error(
+					"getUserByFid: user lookup outage:",
+					fid,
+					error instanceof Error ? error.message : JSON.stringify(error),
+				);
+				return undefined;
+			}),
 			getUserPrimaryAddress(fid),
 		]);
 

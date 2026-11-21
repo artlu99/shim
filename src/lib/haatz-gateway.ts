@@ -4,6 +4,7 @@ import {
 	FARCASTER_EPOCH,
 	HAATZ_GATEWAY_ENDPOINT,
 	HAATZ_GATEWAY_TIMEOUT_MS,
+	HTTP_FAN_OUT_BATCH_SIZE,
 	MAX_SYNC_MESSAGES,
 } from "../constants";
 import type { Cast } from "../types";
@@ -11,7 +12,7 @@ import { asCastTypeName, asChain, asFormatVersion } from "./cast-fields";
 import { collectPagedMessages } from "./hub-grpc";
 import { hydrateText } from "./hydration";
 import { upsertCasts } from "./sqlite";
-import { parseGatewayFid } from "./util";
+import { mapBatch, parseGatewayFid } from "./util";
 
 /*
 	The haatz node serves the snapchain /v1 HTTP JSON gateway on 443 — the
@@ -207,7 +208,10 @@ export const getHaatzCastsByFid = async (
 	);
 
 	const adds = messages.filter(isCastAdd);
-	const casts = sift(await Promise.all(adds.map(gatewayCastToCast)));
+	// hydrateText fans out per mention — bound the page wave like feeds do
+	const casts = sift(
+		await mapBatch(adds, gatewayCastToCast, HTTP_FAN_OUT_BATCH_SIZE),
+	);
 	console.log(`got ${casts.length} casts from haatz gateway for fid ${fid}`);
 
 	let numNew = 0;
@@ -238,7 +242,9 @@ export const getHaatzChannelFeed = async (
 
 	const messages = Array.isArray(json?.messages) ? json.messages : [];
 	const adds = messages.filter(isCastAdd);
-	const casts = sift(await Promise.all(adds.map(gatewayCastToCast)));
+	const casts = sift(
+		await mapBatch(adds, gatewayCastToCast, HTTP_FAN_OUT_BATCH_SIZE),
+	);
 	console.log(
 		`got ${casts.length} casts from haatz gateway for parentUrl ${parentUrl}`,
 	);

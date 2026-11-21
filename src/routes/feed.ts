@@ -1,6 +1,11 @@
 import { Elysia, t } from "elysia";
 import { sift } from "radash";
-import { FEED_DEFAULT_PAGE_SIZE, HTTP_FAN_OUT_BATCH_SIZE } from "../constants";
+import {
+	FEED_DEFAULT_PAGE_SIZE,
+	HTTP_FAN_OUT_BATCH_SIZE,
+	MAX_REFRESH_FIDS,
+	MAX_REVERSE_CHRON_LIMIT,
+} from "../constants";
 import { getCastInEitherWorld } from "../lib/cast-lookup";
 import { syncChannelFeed } from "../lib/cast-sync";
 import {
@@ -134,8 +139,10 @@ export const postReverseChronFeed = new Elysia().post(
 	},
 	{
 		body: t.Object({
-			fids: t.Array(t.Number()),
-			limit: t.Optional(t.Number({ default: 10 })),
+			fids: t.Array(t.Number(), { maxItems: MAX_REFRESH_FIDS }),
+			limit: t.Optional(
+				t.Number({ default: 10, maximum: MAX_REVERSE_CHRON_LIMIT }),
+			),
 			cursor: t.Optional(t.String()),
 		}),
 		detail: {

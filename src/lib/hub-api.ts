@@ -579,18 +579,22 @@ export const getHaatzUserByFid = async (
  * The fork-aware user primitive — the user-side twin of
  * getCastInEitherWorld. Hypersnap is primary; the Snapchain (crackle)
  * answer is consulted on a clean Hypersnap miss or a Hypersnap outage.
- * Unlike the cast legs, the crackle client conflates outage with miss
+ * A native-fid Hypersnap outage THROWS (same contract as cast-sync):
+ * Snapchain cannot know the fid, so an empty fallback would be a lie.
+ * For legacy fids, crackle still conflates outage with miss
  * (getHubUserByFid answers undefined for both — pre-existing behavior),
- * so a crackle failure cannot upgrade to a throw here: the caller sees
+ * so a crackle failure cannot upgrade to a throw: the caller sees
  * undefined, the user cache stays unwritten, and the next call retries.
  */
 export const getUserInEitherWorld = async (
 	fid: number,
 ): Promise<User | undefined> => {
+	let haatzError: unknown;
 	try {
 		const haatzUser = await getHaatzUserByFid(fid);
 		if (haatzUser) return haatzUser;
 	} catch (error) {
+		haatzError = error;
 		console.error(
 			"getUserInEitherWorld: haatz gateway unavailable, falling back to snapchain:",
 			fid,
@@ -599,9 +603,18 @@ export const getUserInEitherWorld = async (
 	}
 
 	// A native fid cannot exist on Snapchain — the legacy world predates
-	// the fork's widened fid space — so there is nothing to fall back to.
-	// undefined is the honest miss (uncached, so the next call retries).
+	// the fork's widened fid space. A clean empty Hypersnap answer is the
+	// true miss; a Hypersnap outage must not wear Snapchain's empty answer.
 	if (isNativeFid(fid)) {
+		if (haatzError !== undefined) {
+			throw new Error(
+				`user lookup outage for fid ${fid}: ${
+					haatzError instanceof Error
+						? haatzError.message
+						: JSON.stringify(haatzError)
+				}`,
+			);
+		}
 		return undefined;
 	}
 
@@ -617,25 +630,83 @@ export const getUsernameByFid = async (
 	return user?.username ?? undefined;
 };
 
+const targetFidsFromLinkMessages = (messages: LinkAddMessage[]): number[] =>
+	sift(
+		messages.map((m) =>
+			// haatz may serialize native target fids as decimal strings
+			parseGatewayFid(m.data?.linkBody?.targetFid),
+		),
+	);
+
+/**
+ * The fork-aware following-graph primitive. Hypersnap is primary;
+ * Snapchain is consulted on a clean empty haatz answer or a haatz outage
+ * — except for native fids, which cannot exist on Snapchain. A total
+ * outage THROWS: an empty array used to mean "follows nobody" and hid
+ * hub failures from /refresh's username→followees walk.
+ */
 export const getFollowingByFid = async (
 	fid: number,
 	maxPages = 10,
 ): Promise<number[]> => {
+	const uri = `/v1/linksByFid?fid=${fid}&reverse=false&link_type=follow`;
+
+	let haatzError: unknown;
+	let haatzFollows: number[] | undefined;
 	try {
-		const res = await cachedFetcherPaginatedGet<LinkAddMessage>(
-			`/v1/linksByFid?fid=${fid}&reverse=false&link_type=follow`,
+		const messages = await cachedHaatzPaginatedGet<LinkAddMessage>(
+			uri,
 			Ttl.FEED,
 			1000,
 			maxPages,
 		);
-		return sift(res.map((m) => m.data.linkBody.targetFid));
+		haatzFollows = targetFidsFromLinkMessages(messages);
+		if (haatzFollows.length > 0) {
+			return haatzFollows;
+		}
+	} catch (error) {
+		haatzError = error;
+		console.error(
+			"getFollowingByFid: haatz gateway unavailable, falling back to snapchain:",
+			fid,
+			error instanceof Error ? error.message : JSON.stringify(error),
+		);
+	}
+
+	if (isNativeFid(fid)) {
+		if (haatzError !== undefined) {
+			throw new Error(
+				`following lookup outage for fid ${fid}: ${
+					haatzError instanceof Error
+						? haatzError.message
+						: JSON.stringify(haatzError)
+				}`,
+			);
+		}
+		return haatzFollows ?? [];
+	}
+
+	try {
+		const messages = await cachedFetcherPaginatedGet<LinkAddMessage>(
+			uri,
+			Ttl.FEED,
+			1000,
+			maxPages,
+		);
+		return targetFidsFromLinkMessages(messages);
 	} catch (error) {
 		console.error(
 			"Error fetching following by fid:",
 			fid,
 			error instanceof Error ? error.message : JSON.stringify(error),
 		);
-		return [];
+		// Empty haatz sent us here — a crackle outage must not become
+		// "follows nobody". If haatz also failed, both worlds are down.
+		const parts = [haatzError, error]
+			.filter((e) => e !== undefined)
+			.map((e) => (e instanceof Error ? e.message : JSON.stringify(e)))
+			.join(" | ");
+		throw new Error(`following lookup outage for fid ${fid}: ${parts}`);
 	}
 };
 

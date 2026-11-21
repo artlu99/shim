@@ -228,7 +228,7 @@ describe("getUserInEitherWorld: native fids", () => {
 		expect(await getUserInEitherWorld(NATIVE_FID)).toBeUndefined();
 	});
 
-	test("a Hypersnap outage stays a miss, not a legacy-world answer", async () => {
+	test("a Hypersnap outage throws — never a legacy-world miss", async () => {
 		stubFetch((url) => {
 			if (url.includes("haatz.quilibrium.com")) {
 				return new Response("internal error", { status: 500 });
@@ -236,7 +236,9 @@ describe("getUserInEitherWorld: native fids", () => {
 			throw new Error(`crackle must not be called, got: ${url}`);
 		});
 
-		expect(await getUserInEitherWorld(NATIVE_FID)).toBeUndefined();
+		await expect(getUserInEitherWorld(NATIVE_FID)).rejects.toThrow(
+			/user lookup outage/,
+		);
 	});
 });
 
