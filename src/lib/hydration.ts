@@ -16,7 +16,7 @@ export const stripLegacyProNft = (
 	return rest;
 };
 
-// lmdis returns the raw string when JSON.parse fails, so verify the
+// Redis returns the raw string when JSON.parse fails, so verify the
 // minimal shape before trusting a cache hit
 const isCachedUser = (value: unknown): value is User =>
 	typeof value === "object" &&
@@ -27,7 +27,7 @@ const isCachedUser = (value: unknown): value is User =>
 const inFlight = new Map<number, Promise<User>>();
 
 // Best knowledge of a fid for this process, kept for the same four hours
-// as user:${fid}. A resolved profile lands here even when the lmdis write
+// as user:${fid}. A resolved profile lands here even when the Redis write
 // times out — otherwise the next mention misses, asks Hypersnap again,
 // and a page of casts that share an author becomes one write per cast.
 // Capped like HotCache: a wide feed / mention storm must not retain
@@ -125,7 +125,7 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 		const user: User = {
 			fid,
 			username: hubUser?.username ?? null,
-			// Stale lmdis entries predate these fields — degrade to null/[],
+			// Stale cache entries predate these fields — degrade to null/[],
 			// never pretend the hub answered.
 			fname: hubUser?.fname ?? null,
 			attestations: hubUser?.attestations ?? [],
@@ -138,7 +138,7 @@ export const getUserByFid = async (fid: number): Promise<User> => {
 		// undefined hub user and undefined primary address are fetch failures
 		// (a real "no address" result is null). Leave those uncached so the
 		// next call retries instead of pinning a blank profile for the TTL.
-		// The process-local copy is taken before the lmdis write: a timeout
+		// The process-local copy is taken before the Redis write: a timeout
 		// there must not forget a profile we already resolved.
 		if (hubUser && primaryAddress !== undefined) {
 			rememberUser(user);

@@ -72,7 +72,7 @@ describe("Hydration Functions", () => {
 				},
 				set: async (key: string, value: string) => {
 					if (failUserCacheWrites) {
-						throw new Error("lmdis: request timed out after 5000ms");
+						throw new Error("redis: request timed out after 5000ms");
 					}
 					userCacheStore.set(key, value);
 					return "OK";
@@ -273,7 +273,7 @@ describe("Hydration Functions", () => {
 			expect(second).toEqual(first);
 		});
 
-		it("remembers a resolved profile when the lmdis write times out", async () => {
+		it("remembers a resolved profile when the Redis write times out", async () => {
 			hubUserSpy.mockResolvedValue({
 				fid: mockFid,
 				username: "testuser",

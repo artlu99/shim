@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, mock, test } from "bun:test";
 import * as realRedis from "../../lib/redis";
 
 // Same in-memory redis snapshot as user-lookup.test.ts — the paginated
-// cache legs must not touch a real lmdis, and must not leak into other files.
+// cache legs must not touch a real Redis, and must not leak into other files.
 const originalRedis = {
 	default: realRedis.default,
 	Ttl: realRedis.Ttl,

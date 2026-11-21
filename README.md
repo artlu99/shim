@@ -1,6 +1,6 @@
 # shim
 
-The Shim API is a thin Farcaster read layer. It runs on [Bun](https://bun.sh/) and [Elysia](https://elysiajs.com/), stores casts in SQLite, and caches its own network calls through a sibling [lmdis](https://github.com/artlu99/lmdis) service. Production is Docker Compose on a Debian VPS.
+The Shim API is a thin Farcaster read layer. It runs on [Bun](https://bun.sh/) and [Elysia](https://elysiajs.com/), stores casts in SQLite, and caches its own network calls through a sibling Redis (`redis:7.2-alpine`) over Bun's native RESP client. Production is Docker Compose on a Debian VPS.
 
 On a Debian VPS, ensure git and rootless Docker Engine + Compose plugin are set up. Then as the deploy user (not root):
 
@@ -21,7 +21,9 @@ bun install
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The local store is `data/shim.sqlite`. A local `.env` needs `HUB_GRPC_ENDPOINT`, `UPSTASH_REDIS_REST_URL`, and `UPSTASH_REDIS_REST_TOKEN` (can be lmdis). On a box, `install.sh` writes those. `HYPERSNAP_API_ENDPOINT` is optional — it defaults to Quilibrium's public node and backs `/h`'s hash-only network resolution on a local-index miss. `HAATZ_GATEWAY_ENDPOINT` is optional too and defaults to the same node; it backs the `/v1` gateway that corpus sync and user hydration use.
+Open [http://localhost:3000](http://localhost:3000). The local store is `data/shim.sqlite`. A local `.env` needs `HUB_GRPC_ENDPOINT` and `REDIS_URL` (e.g. `redis://127.0.0.1:6379` for bare-metal `bun dev`). On a box, `install.sh` writes those; Compose overrides `REDIS_URL` to `redis://redis:6379` for the app container. `HYPERSNAP_API_ENDPOINT` is optional — it defaults to Quilibrium's public node and backs `/h`'s hash-only network resolution on a local-index miss. `HAATZ_GATEWAY_ENDPOINT` is optional too and defaults to the same node; it backs the `/v1` gateway that corpus sync and user hydration use.
+
+Upgrading from v1 (lmdis): drop `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, and `LMDIS_REST_TOKEN` from `.env`, set `REDIS_URL` if you run outside Compose, then `docker compose up -d --build`. The old `lmdis` / `lmdisdata` resources can be removed after the new stack is healthy (`docker compose rm -sf lmdis`; `docker volume rm` the project’s `lmdisdata` if you no longer need it).
 
 The last Render/Neon tree was the `cloud-final` tag.
 
@@ -37,7 +39,7 @@ Native fids and the 2^32 boundary (2026-11-16): the hard fork allocates "native"
 
 ## Install
 
-`install.sh` runs as the deploy user. It does not use sudo or install packages. Git, Docker Engine, and the Compose plugin must already be installed. The script checks those, then runs `docker info` and looks for rootless mode. Joining the `docker` group is root-equivalent. Rootless setup is documented at <https://docs.docker.com/engine/security/rootless/>. A rootful daemon does not fail the script. It prints a warning, points at rootless setup instructions, and continues. It clones this repo to `$HOME/shim` and lmdis beside it. The app binds `127.0.0.1:7300`. When `$HOME/shim/.env` is missing it writes one: 32 bytes from `/dev/urandom` go in both `LMDIS_REST_TOKEN` and `UPSTASH_REDIS_REST_TOKEN`, mode `600`, and the value is not printed. A re-run leaves an existing `.env` in place. It does not start Compose or install cloudflared.
+`install.sh` runs as the deploy user. It does not use sudo or install packages. Git, Docker Engine, and the Compose plugin must already be installed. The script checks those, then runs `docker info` and looks for rootless mode. Joining the `docker` group is root-equivalent. Rootless setup is documented at <https://docs.docker.com/engine/security/rootless/>. A rootful daemon does not fail the script. It prints a warning, points at rootless setup instructions, and continues. It clones this repo to `$HOME/shim`. The app binds `127.0.0.1:7300`. When `$HOME/shim/.env` is missing it writes one with `REDIS_URL`, `SHIM_PORT`, `COMPOSE_PROJECT_NAME`, and `HUB_GRPC_ENDPOINT`, mode `600`. A re-run leaves an existing `.env` in place. It does not start Compose or install cloudflared.
 
 From a checkout: `bash install.sh`. If 7300 is already taken, set `SHIM_PORT` before the first run (`SHIM_PORT=7301 bash install.sh`, or on the `bash` side of the curl pipe). Compose reads that value from `.env`. If `.env` already exists, edit `SHIM_PORT` there instead. The container still listens on 3000.
 
@@ -57,7 +59,7 @@ curl -s localhost:7300/health
 curl -s localhost:7300/info
 ```
 
-Use the port from `.env` in that curl when it is not 7300. `upgrade.sh` fast-forwards this checkout to `origin/main` when the tree is clean, then rebuilds. A dirty tree exits and leaves the stack alone. It does not pull `~/lmdis`. When the running app's `SHIM_GIT_SHA` already equals `git rev-parse --short HEAD`, it skips the image build and runs `docker compose up -d`, which applies a changed `.env` or compose file and leaves the containers alone when nothing drifted. Otherwise it bakes that SHA in and runs `docker compose up -d --build`. `docker compose down` is not part of an upgrade. Volumes stay.
+Use the port from `.env` in that curl when it is not 7300. `upgrade.sh` fast-forwards this checkout to `origin/main` when the tree is clean, then rebuilds. A dirty tree exits and leaves the stack alone. When the running app's `SHIM_GIT_SHA` already equals `git rev-parse --short HEAD`, it skips the image build and runs `docker compose up -d`, which applies a changed `.env` or compose file and leaves the containers alone when nothing drifted. Otherwise it bakes that SHA in and runs `docker compose up -d --build`. `docker compose down` is not part of an upgrade. Volumes stay.
 
 ## Ingress
 

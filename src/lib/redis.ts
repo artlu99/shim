@@ -1,6 +1,6 @@
+import { RedisClient } from "bun";
 import invariant from "tiny-invariant";
 import { HotCache } from "./hot-cache";
-import { LmdisClient as Redis, type SetCommandOptions } from "./lmdis";
 
 export enum Ttl {
 	SHORT = 60, // 60 seconds
@@ -9,37 +9,238 @@ export enum Ttl {
 	LONG = 7 * 24 * 60 * 60, // 7 days
 }
 
-// In-process micro-LRU in front of lmdis. Every cache GET used to pay an
-// HTTP hop plus a JSON parse on the answer; hot reads now resolve in RAM.
+export type SetCommandOptions = {
+	ex?: number;
+	px?: number;
+	exat?: number;
+	pxat?: number;
+	keepTtl?: boolean;
+	get?: boolean;
+	nx?: boolean;
+	xx?: boolean;
+};
+
+export class RedisError extends Error {
+	constructor(message: string) {
+		super(message.startsWith("redis:") ? message : `redis: ${message}`);
+		this.name = "RedisError";
+	}
+}
+
+// In-process micro-LRU in front of Redis. Hot reads skip the TCP hop and
+// the JSON parse; the biggest read paths (/reverse-chron feed hydration,
+// /h lookups) re-read the same keys hundreds of times during a burst.
 // HOT_TTL_MS is the CAP on any entry's stamp — the wrapper caps every
-// stamp at the underlying lmdis entry's remaining lifetime (see
+// stamp at the underlying Redis entry's remaining lifetime (see
 // withHotCache), so no entry ever serves past its upstream validity.
 export const HOT_TTL_MS = 30_000;
 export const HOT_MAX_ENTRIES = 512;
-// Values above this stay lmdis-cached but skip the LRU: channelFeed:*
+// Values above this stay Redis-cached but skip the LRU: channelFeed:*
 // entries run to tens of KB, and an LRU full of them would be its own
 // memory burst on a box that is already fighting one.
 export const HOT_MAX_WIRE_BYTES = 32_768;
 
-// Per-request deadline for the lmdis HTTP hop (LMDB is local-disk fast;
-// this only exists so a stalled lmdis cannot pin callers — see the
-// vendored client's timeoutMs note).
-const LMDIS_TIMEOUT_MS = 5_000;
+const REDIS_CONNECTION_TIMEOUT_MS = 5_000;
 
-let redisInstance: CacheClient | null = null;
+export type RedisBackend = {
+	get<T>(key: string): Promise<T | null>;
+	set<T>(
+		key: string,
+		value: T,
+		opts?: SetCommandOptions,
+	): Promise<"OK" | null>;
+	del(...keys: string[]): Promise<number>;
+	hincrby(key: string, field: string, increment: number): Promise<number>;
+	sadd(key: string, ...members: (string | number)[]): Promise<number>;
+	smembers(key: string): Promise<string[]>;
+	srem(key: string, ...members: (string | number)[]): Promise<number>;
+	keys(pattern?: string): Promise<string[]>;
+	scanKeys(
+		cursor: string,
+		count: number,
+		pattern?: string,
+	): Promise<[string, string[]]>;
+	close?: () => void;
+};
 
-// Capture the pristine fetch at module load and inject it into the client.
-// In production this is the global fetch, unchanged; in tests it makes the
-// cache leg immune to files that stub globalThis.fetch for their own
-// network clients — bun test runs files concurrently in one process, and
-// a stubbed global would otherwise hijack lmdis HTTP calls.
-const fetchImpl = globalThis.fetch.bind(globalThis);
+// Callers often pre-stringify; Redis stores strings as-is. Objects /
+// numbers / bools are JSON-encoded so GET can round-trip the same shapes
+// the old lmdis HTTP client returned.
+const serialize = (value: unknown): string => {
+	if (typeof value === "string") {
+		return value;
+	}
+	return JSON.stringify(value);
+};
 
-// Mirror lmdis read semantics on values arriving through set(): callers
-// pre-stringify, lmdis serializes strings as-is and parses them back on
+const deserialize = <T>(value: string | null): T | null => {
+	if (value === null) {
+		return null;
+	}
+	try {
+		return JSON.parse(value) as T;
+	} catch {
+		return value as T;
+	}
+};
+
+const unsupportedSetOptions = (opts?: SetCommandOptions): string | null => {
+	if (!opts) return null;
+	if (opts.get) return "get";
+	if (opts.nx) return "nx";
+	if (opts.xx) return "xx";
+	return null;
+};
+
+const wrapRedisError = (error: unknown): never => {
+	if (error instanceof RedisError) {
+		throw error;
+	}
+	const message =
+		error instanceof Error ? error.message : JSON.stringify(error);
+	throw new RedisError(message);
+};
+
+export class BunRedisBackend implements RedisBackend {
+	private readonly client: RedisClient;
+
+	constructor(url: string) {
+		this.client = new RedisClient(url, {
+			connectionTimeout: REDIS_CONNECTION_TIMEOUT_MS,
+		});
+	}
+
+	async get<T>(key: string): Promise<T | null> {
+		try {
+			const result = await this.client.get(key);
+			return deserialize<T>(result);
+		} catch (error) {
+			wrapRedisError(error);
+		}
+	}
+
+	async set<T>(
+		key: string,
+		value: T,
+		opts?: SetCommandOptions,
+	): Promise<"OK" | null> {
+		const unsupported = unsupportedSetOptions(opts);
+		if (unsupported) {
+			throw new RedisError(`SET option "${unsupported}" is not supported`);
+		}
+		const serialized = serialize(value);
+		try {
+			if (opts?.ex !== undefined) {
+				return await this.client.set(key, serialized, "EX", opts.ex);
+			}
+			if (opts?.px !== undefined) {
+				return await this.client.set(key, serialized, "PX", opts.px);
+			}
+			if (opts?.exat !== undefined) {
+				return await this.client.set(key, serialized, "EXAT", opts.exat);
+			}
+			if (opts?.pxat !== undefined) {
+				return await this.client.set(key, serialized, "PXAT", opts.pxat);
+			}
+			if (opts?.keepTtl) {
+				return await this.client.set(key, serialized, "KEEPTTL");
+			}
+			return await this.client.set(key, serialized);
+		} catch (error) {
+			wrapRedisError(error);
+		}
+	}
+
+	async del(...keys: string[]): Promise<number> {
+		if (keys.length === 0) {
+			return 0;
+		}
+		try {
+			return await this.client.del(...keys);
+		} catch (error) {
+			wrapRedisError(error);
+		}
+	}
+
+	async hincrby(
+		key: string,
+		field: string,
+		increment: number,
+	): Promise<number> {
+		try {
+			return await this.client.hincrby(key, field, increment);
+		} catch (error) {
+			wrapRedisError(error);
+		}
+	}
+
+	async sadd(key: string, ...members: (string | number)[]): Promise<number> {
+		try {
+			return await this.client.sadd(key, ...members.map(String));
+		} catch (error) {
+			wrapRedisError(error);
+		}
+	}
+
+	async smembers(key: string): Promise<string[]> {
+		try {
+			return await this.client.smembers(key);
+		} catch (error) {
+			wrapRedisError(error);
+		}
+	}
+
+	async srem(key: string, ...members: (string | number)[]): Promise<number> {
+		try {
+			return await this.client.srem(key, ...members.map(String));
+		} catch (error) {
+			wrapRedisError(error);
+		}
+	}
+
+	async keys(pattern = "*"): Promise<string[]> {
+		try {
+			return await this.client.keys(pattern);
+		} catch (error) {
+			wrapRedisError(error);
+		}
+	}
+
+	async scanKeys(
+		cursor: string,
+		count: number,
+		pattern?: string,
+	): Promise<[string, string[]]> {
+		try {
+			const args = [cursor, "COUNT", String(count)];
+			if (pattern !== undefined) {
+				args.splice(1, 0, "MATCH", pattern);
+			}
+			const result = await this.client.send("SCAN", args);
+			if (
+				!Array.isArray(result) ||
+				result.length !== 2 ||
+				typeof result[0] !== "string" ||
+				!Array.isArray(result[1])
+			) {
+				throw new RedisError("SCAN returned an unexpected shape");
+			}
+			return [result[0], result[1].map(String)];
+		} catch (error) {
+			wrapRedisError(error);
+		}
+	}
+
+	close(): void {
+		this.client.close();
+	}
+}
+
+// Mirror Redis read semantics on values arriving through set(): callers
+// pre-stringify, Redis stores strings as-is, and we parse them back on
 // GET (falling back to the raw string when the value was never JSON).
 // Storing the same deserialization keeps LRU hits byte-identical to what
-// the lmdis path would have returned.
+// the Redis path would have returned.
 const toCachedValue = (value: unknown): unknown => {
 	if (typeof value === "string") {
 		try {
@@ -62,12 +263,12 @@ const wireSize = (value: unknown): number => {
 	}
 };
 
-const withHotCache = (client: Redis) => {
+const withHotCache = (client: RedisBackend) => {
 	const hot = new HotCache(HOT_MAX_ENTRIES, HOT_TTL_MS, HOT_MAX_WIRE_BYTES);
 
 	// Upstream write metadata for keys this process wrote. This is what
-	// keeps the LRU honest on get()-backfills: an entry learned from lmdis
-	// mid-life must not outlive the lmdis entry that backs it, so a
+	// keeps the LRU honest on get()-backfills: an entry learned from Redis
+	// mid-life must not outlive the Redis entry that backs it, so a
 	// backfill is stamped at min(HOT_TTL_MS, remaining) — and a key whose
 	// upstream TTL we don't know (written by a previous process, or
 	// KEEPTTL) is never cached at all. Bounded: pruned opportunistically,
@@ -144,11 +345,11 @@ const withHotCache = (client: Redis) => {
 			opts?: SetCommandOptions,
 		): Promise<"OK" | null> {
 			const result = await client.set(key, value, opts);
-			// Only a write lmdis actually accepted may warm the LRU or record
+			// Only a write Redis actually accepted may warm the LRU or record
 			// upstream TTL knowledge. The warm is stamped at the upstream
 			// entry's remaining lifetime, capped at HOT_TTL_MS — the same
 			// discipline as a backfill, so even a sub-30s TTL can never be
-			// served past its lmdis expiry. KEEPTTL (unknown remaining)
+			// served past its Redis expiry. KEEPTTL (unknown remaining)
 			// warms nothing.
 			if (result === "OK") {
 				const bytes = wireSize(value);
@@ -158,10 +359,7 @@ const withHotCache = (client: Redis) => {
 				// be hundreds of KB), so parsing those first spent a full
 				// JSON.parse on every big cache write for an entry that
 				// would never be served.
-				if (
-					record !== undefined &&
-					bytes <= HOT_MAX_WIRE_BYTES
-				) {
+				if (record !== undefined && bytes <= HOT_MAX_WIRE_BYTES) {
 					const remainingMs = record.expiresAtMs - Date.now();
 					hot.set(
 						key,
@@ -186,7 +384,7 @@ const withHotCache = (client: Redis) => {
 			return removed;
 		},
 		// Drop every LRU entry and write record — tests reset between cases;
-		// an operator who flushed lmdis from another process can do the same
+		// an operator who flushed Redis from another process can do the same
 		// in-process.
 		clear: () => {
 			hot.clear();
@@ -209,24 +407,29 @@ const withHotCache = (client: Redis) => {
 
 export type CacheClient = ReturnType<typeof withHotCache>;
 
+let redisInstance: CacheClient | null = null;
+let testBackend: RedisBackend | null = null;
+
+/**
+ * Tests inject an in-process backend (and clear it in afterAll) so the
+ * HotCache wrapper can run without a live Redis. Production never calls
+ * this — the singleton is built from REDIS_URL on first redis().
+ */
+export const resetRedisForTests = (backend: RedisBackend | null = null) => {
+	redisInstance = null;
+	testBackend = backend;
+};
+
 const redis = () => {
 	if (!redisInstance) {
-		invariant(
-			process.env.UPSTASH_REDIS_REST_URL,
-			"UPSTASH_REDIS_REST_URL is not set",
-		);
-		invariant(
-			process.env.UPSTASH_REDIS_REST_TOKEN,
-			"UPSTASH_REDIS_REST_TOKEN is not set",
-		);
-		redisInstance = withHotCache(
-			new Redis({
-				url: process.env.UPSTASH_REDIS_REST_URL ?? "",
-				token: process.env.UPSTASH_REDIS_REST_TOKEN ?? "",
-				fetch: fetchImpl,
-				timeoutMs: LMDIS_TIMEOUT_MS,
-			}),
-		);
+		if (testBackend) {
+			redisInstance = withHotCache(testBackend);
+		} else {
+			invariant(process.env.REDIS_URL, "REDIS_URL is not set");
+			redisInstance = withHotCache(
+				new BunRedisBackend(process.env.REDIS_URL ?? ""),
+			);
+		}
 	}
 	return redisInstance;
 };

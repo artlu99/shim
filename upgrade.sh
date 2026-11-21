@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy the shim checkout. Safe to re-run. Does not pull ~/lmdis.
+# Deploy the shim checkout. Safe to re-run.
 #   bash upgrade.sh
 # Fast-forwards this directory to origin/main when the tree is clean.
 # A dirty tree exits and leaves the stack alone.

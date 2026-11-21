@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import {
-	clearUpstashEnv,
-	installUpstashEnv,
-	lmdisMock,
-} from "./../helpers/lmdis-mock";
+	installRedisMock,
+	redisMock,
+	uninstallRedisMock,
+} from "./../helpers/redis-mock";
 import {
 	getHaatzProfileByFid,
 	getHypersnapCastByFidAndHash,
@@ -37,29 +37,28 @@ const stubFetch = (impl: () => Promise<Response>) => {
 	return () => calls;
 };
 
-beforeAll(() => {
+beforeAll(async () => {
 	// before the first redis() call constructs the singleton (lazy, first
 	// use inside a test)
-	installUpstashEnv();
+	await installRedisMock();
 });
 
 afterEach(() => {
 	globalThis.fetch = originalFetch;
-	lmdisMock.reset();
+	redisMock.reset();
 	// the in-process LRU is module state the mock reset cannot reach —
 	// a leftover entry would answer later tests before any fetch runs
 	redis().clear();
 });
 
-afterAll(() => {
-	lmdisMock.stop();
-	// other files share this process's env — leave them the cache-less
-	// world they were written against
-	clearUpstashEnv();
+afterAll(async () => {
+	// other files share this process — leave them the cache-less world
+	// they were written against
+	await uninstallRedisMock();
 });
 
 describe("getHypersnapCastByHash: cache", () => {
-	test("a live answer is cached under hyp:cast: — the repeat read is an LRU hit with no fetch and no lmdis ops", async () => {
+	test("a live answer is cached under hyp:cast: — the repeat read is an LRU hit with no fetch and no redis ops", async () => {
 		const fetchCalls = stubFetch(async () =>
 			Response.json({ cast: FIXTURE }, { status: 200 }),
 		);
@@ -68,15 +67,15 @@ describe("getHypersnapCastByHash: cache", () => {
 		expect(first?.fid).toBe(3854);
 		expect(fetchCalls()).toBe(1);
 		// first call: one GET miss + one SET under the fork-world namespace
-		expect(lmdisMock.opCount(`hyp:cast:${HASH}`)).toBe(2);
-		expect(lmdisMock.store.has(`hyp:cast:${HASH}`)).toBe(true);
+		expect(redisMock.opCount(`hyp:cast:${HASH}`)).toBe(2);
+		expect(redisMock.store.has(`hyp:cast:${HASH}`)).toBe(true);
 
-		// repeat read: LRU hit — no network fetch, no lmdis command
-		const opsBeforeRepeat = lmdisMock.opCount(`hyp:cast:${HASH}`);
+		// repeat read: LRU hit — no network fetch, no redis command
+		const opsBeforeRepeat = redisMock.opCount(`hyp:cast:${HASH}`);
 		const second = await getHypersnapCastByHash(HASH as `0x${string}`);
 		expect(second?.fid).toBe(3854);
 		expect(fetchCalls()).toBe(1);
-		expect(lmdisMock.opCount(`hyp:cast:${HASH}`)).toBe(opsBeforeRepeat);
+		expect(redisMock.opCount(`hyp:cast:${HASH}`)).toBe(opsBeforeRepeat);
 	});
 
 	test("a 404 is negatively cached — the repeat miss performs no fetch", async () => {
@@ -90,7 +89,7 @@ describe("getHypersnapCastByHash: cache", () => {
 		expect(fetchCalls()).toBe(1);
 
 		const stored = JSON.parse(
-			lmdisMock.store.get(`hyp:cast:${HASH}`)?.value ?? "null",
+			redisMock.store.get(`hyp:cast:${HASH}`)?.value ?? "null",
 		);
 		expect(stored).toEqual({ hypersnap404: true });
 	});
@@ -101,7 +100,7 @@ describe("getHypersnapCastByHash: cache", () => {
 		});
 		expect(getHypersnapCastByHash(HASH as `0x${string}`)).rejects.toThrow();
 		expect(fetchCalls()).toBe(1);
-		expect(lmdisMock.store.has(`hyp:cast:${HASH}`)).toBe(false);
+		expect(redisMock.store.has(`hyp:cast:${HASH}`)).toBe(false);
 
 		// network recovers — a clean miss must not be worn
 		stubFetch(async () =>
@@ -116,16 +115,16 @@ describe("getHypersnapCastByHash: cache", () => {
 		expect(getHypersnapCastByHash(HASH as `0x${string}`)).rejects.toThrow(
 			/malformed/,
 		);
-		expect(lmdisMock.store.has(`hyp:cast:${HASH}`)).toBe(false);
+		expect(redisMock.store.has(`hyp:cast:${HASH}`)).toBe(false);
 	});
 
-	test("a hash-only lmdis outage degrades to uncached — the live answer stands", async () => {
-		lmdisMock.failNextRequest();
+	test("a hash-only redis outage degrades to uncached — the live answer stands", async () => {
+		redisMock.failNextRequest();
 		const fetchCalls = stubFetch(async () =>
 			Response.json({ cast: FIXTURE }, { status: 200 }),
 		);
 
-		// the cache read fails (502 non-JSON), the live fetch answers
+		// the cache read fails, the live fetch answers
 		const cast = await getHypersnapCastByHash(HASH as `0x${string}`);
 		expect(cast?.fid).toBe(3854);
 		expect(fetchCalls()).toBe(1);
@@ -139,15 +138,15 @@ describe("getHypersnapCastByHash: cache", () => {
 			await getHypersnapCastByFidAndHash(3854, HASH as `0x${string}`),
 		).toBeDefined();
 		expect(fetchCalls()).toBe(1);
-		const opsAfterFirst = lmdisMock.opCount(`hyp:cast:${HASH}`);
+		const opsAfterFirst = redisMock.opCount(`hyp:cast:${HASH}`);
 
-		// same hash, wrong fid: served from the cache — no fetch, no lmdis
+		// same hash, wrong fid: served from the cache — no fetch, no redis
 		// ops — and the per-fid filter still answers a clean miss
 		expect(
 			await getHypersnapCastByFidAndHash(2, HASH as `0x${string}`),
 		).toBeUndefined();
 		expect(fetchCalls()).toBe(1);
-		expect(lmdisMock.opCount(`hyp:cast:${HASH}`)).toBe(opsAfterFirst);
+		expect(redisMock.opCount(`hyp:cast:${HASH}`)).toBe(opsAfterFirst);
 	});
 });
 
@@ -183,7 +182,7 @@ describe("getHaatzProfileByFid: cache", () => {
 		);
 		expect(getHaatzProfileByFid(3854)).rejects.toThrow();
 		expect(outageFetch()).toBe(1);
-		expect(lmdisMock.store.has("hyp:profile:3854")).toBe(false);
+		expect(redisMock.store.has("hyp:profile:3854")).toBe(false);
 
 		const retryFetch = stubFetch(async () =>
 			Response.json(
@@ -204,15 +203,15 @@ describe("the redis wrapper's hot cache", () => {
 		await client.set("wrapper:test", JSON.stringify({ a: 1 }), {
 			ex: 60,
 		});
-		// an LRU hit performs zero lmdis ops
+		// an LRU hit performs zero redis ops
 		expect(await client.get("wrapper:test")).toEqual({ a: 1 });
-		expect(lmdisMock.opCount("wrapper:test")).toBe(1); // the SET only
+		expect(redisMock.opCount("wrapper:test")).toBe(1); // the SET only
 
 		await client.del("wrapper:test");
-		// del only invalidates the LRU in-process; the lmdis key is gone,
+		// del only invalidates the LRU in-process; the redis key is gone,
 		// so the read after it is a real miss
 		expect(await client.get("wrapper:test")).toBeNull();
-		expect(lmdisMock.opCount("wrapper:test")).toBe(3); // SET, DEL, GET
+		expect(redisMock.opCount("wrapper:test")).toBe(3); // SET, DEL, GET
 	});
 
 	test("a cached boolean false reads back as a hit, not a miss", async () => {
@@ -221,10 +220,10 @@ describe("the redis wrapper's hot cache", () => {
 
 		await client.set("wrapper:bool", false, { ex: 60 });
 		expect(await client.get<boolean>("wrapper:bool")).toBe(false);
-		expect(lmdisMock.opCount("wrapper:bool")).toBe(1); // the SET only
+		expect(redisMock.opCount("wrapper:bool")).toBe(1); // the SET only
 	});
 
-	// The LRU must never serve a value past the lifetime of the lmdis entry
+	// The LRU must never serve a value past the lifetime of the Redis entry
 	// that backs it. Backfills are stamped at the upstream remaining TTL
 	// (known from this process's own writes) and keys with unknown upstream
 	// TTL are never cached at all.
@@ -233,7 +232,7 @@ describe("the redis wrapper's hot cache", () => {
 		await client.set("bf:known", JSON.stringify({ v: 1 }), { ex: 1 });
 		expect(await client.get("bf:known")).toEqual({ v: 1 }); // LRU hit
 
-		redis().clear(); // force the next read to backfill from lmdis
+		redis().clear(); // force the next read to backfill from redis
 		expect(await client.get("bf:known")).toEqual({ v: 1 }); // backfilled
 
 		// past the upstream expiry neither layer serves it, and the dead
@@ -242,7 +241,7 @@ describe("the redis wrapper's hot cache", () => {
 		expect(await client.get("bf:known")).toBeNull();
 	});
 
-	test("a sub-30s TTL is served no longer than its lmdis lifetime", async () => {
+	test("a sub-30s TTL is served no longer than its redis lifetime", async () => {
 		const client = redis();
 		// a write with ex below HOT_TTL_MS: the LRU stamp must cap at it
 		await client.set("bf:short", JSON.stringify({ v: 1 }), { ex: 1 });
@@ -251,19 +250,16 @@ describe("the redis wrapper's hot cache", () => {
 	});
 
 	test("a key this process never wrote is not backfilled into the LRU", async () => {
-		const { LmdisClient } = (await import("../../lib/lmdis")) as any;
-		const raw = new LmdisClient({
-			url: process.env.UPSTASH_REDIS_REST_URL,
-			token: process.env.UPSTASH_REDIS_REST_TOKEN,
+		await redisMock.rawSet("bf:unknown", JSON.stringify({ v: 2 }), {
+			ex: 60,
 		});
-		await raw.set("bf:unknown", JSON.stringify({ v: 2 }), { ex: 60 });
 
 		const client = redis();
 		redis().clear();
-		expect(await client.get("bf:unknown")).toEqual({ v: 2 }); // from lmdis
-		// not cached: the repeat read pays another lmdis round-trip
+		expect(await client.get("bf:unknown")).toEqual({ v: 2 }); // from redis
+		// not cached: the repeat read pays another redis round-trip
 		expect(await client.get("bf:unknown")).toEqual({ v: 2 });
-		// SET + GET + GET
-		expect(lmdisMock.opCount("bf:unknown")).toBe(3);
+		// rawSet + GET + GET
+		expect(redisMock.opCount("bf:unknown")).toBe(3);
 	});
 });

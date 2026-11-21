@@ -93,7 +93,7 @@ export const hasFidSignedSocialContract = async (
 				error instanceof Error ? error.message : JSON.stringify(error),
 			);
 		}
-		// lmdis returns raw strings when JSON.parse fails, so only trust
+		// Redis returns raw strings when JSON.parse fails, so only trust
 		// real booleans — anything else is treated as a miss
 		if (typeof cached === "boolean") {
 			return cached;

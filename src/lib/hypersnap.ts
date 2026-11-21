@@ -55,7 +55,7 @@ interface HypersnapCast {
 const with0x = (hash: string): `0x${string}` =>
 	`0x${hash.replace(/^0x/, "").toLowerCase()}`;
 
-// lmdis cannot distinguish an absent key from a cached null (both read
+// Redis cannot distinguish an absent key from a cached null (both read
 // back null — same lesson as warpcast.ts's not-found sentinel), so an
 // authoritative 404 caches as a sentinel object.
 const HYPERSNAP_404 = { hypersnap404: true } as const;
@@ -201,11 +201,11 @@ export const hypersnapCastToCast = (raw: unknown): Cast | undefined => {
  * transport failure or a malformed answer — callers must treat a throw as
  * an outage (503), never as "cast not found".
  *
- * Cached through lmdis under hyp:cast:<hash> (SHORT TTL) — this is the
+ * Cached through Redis under hyp:cast:<hash> (SHORT TTL) — this is the
  * PRIMARY cast leg and it used to bypass the cache entirely, so every
  * warm /h lookup and every /reverse-chron item paid a live HTTPS call,
  * forever. 404s are negatively cached the way the Warpcast client caches
- * its 404s (sentinel object — lmdis cannot store a bare null): a
+ * its 404s (sentinel object — Redis cannot store a bare null): a
  * Snapchain-world hash absent from the local corpus is unresolvable by
  * hash alone and would otherwise re-hit the live index on every request,
  * indefinitely. An outage or a malformed answer is never cached — the

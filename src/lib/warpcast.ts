@@ -7,7 +7,7 @@ import redis, { Ttl } from "./redis";
 const warpcastApi = fetcher({ base: "https://api.farcaster.xyz" });
 
 // Same attribution scheme as hub-api's hubFailure: cache-leg failures carry
-// the "lmdis:" prefix and hub calls are labeled "hub <uri>", so
+// the "redis:" prefix and hub calls are labeled "hub <uri>", so
 // api.farcaster.xyz failures are labeled "warpcast <uri>" — making any
 // route-level catch self-identifying about which upstream leg threw
 // (2026-10-30 incident logged both legs as bare "Failed to parse JSON").
@@ -65,7 +65,7 @@ interface ChannelBannedUserWarpcastApiResponse {
 	next: { cursor: string };
 }
 
-// lmdis cannot distinguish an absent key from a cached JSON null (both
+// Redis cannot distinguish an absent key from a cached JSON null (both
 // deserialize to null, and the miss check is truthiness), so not-found is
 // cached as a sentinel object — a plain null write was never honored on read
 const NOT_FOUND = { warpcast404: true } as const;

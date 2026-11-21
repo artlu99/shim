@@ -3,10 +3,10 @@
 #   bash install.sh
 # Expects git, Docker Engine, and the Compose plugin to already be installed.
 # A rootless daemon is the preferred path. A rootful one warns and continues.
-# Clones to $HOME/shim and $HOME/lmdis. The app binds 127.0.0.1:${SHIM_PORT:-7300}.
+# Clones to $HOME/shim. The app binds 127.0.0.1:${SHIM_PORT:-7300}.
 #   SHIM_PORT=7301 bash install.sh
-# When $HOME/shim/.env is missing, writes one with a random lmdis token.
-# Does not print that token, start Compose, or install cloudflared.
+# When $HOME/shim/.env is missing, writes one with REDIS_URL for the
+# compose-network Redis. Does not start Compose or install cloudflared.
 set -euo pipefail
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -76,22 +76,13 @@ else
 fi
 
 shim_dir="${HOME}/shim"
-lmdis_dir="${HOME}/lmdis"
 
-# Sibling checkouts. Compose builds lmdis from ../lmdis.
 if [ -e "$shim_dir" ] && [ ! -d "$shim_dir/.git" ]; then
 	echo "$shim_dir exists and is not a git checkout" >&2
 	exit 1
 fi
-if [ -e "$lmdis_dir" ] && [ ! -d "$lmdis_dir/.git" ]; then
-	echo "$lmdis_dir exists and is not a git checkout" >&2
-	exit 1
-fi
 if [ ! -d "$shim_dir/.git" ]; then
 	git clone https://github.com/artlu99/shim "$shim_dir"
-fi
-if [ ! -d "$lmdis_dir/.git" ]; then
-	git clone https://github.com/artlu99/lmdis "$lmdis_dir"
 fi
 
 if [ -n "$(git -C "$shim_dir" status --porcelain)" ]; then
@@ -102,22 +93,17 @@ else
 	git -C "$shim_dir" pull --ff-only origin main
 fi
 
-# An existing .env is left alone so a re-run does not rotate the token.
+# An existing .env is left alone so a re-run does not clobber operator edits.
 if [ ! -f "$shim_dir/.env" ]; then
 	(
 		umask 077
-		token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
-		if [[ ! "$token" =~ ^[0-9a-f]{64}$ ]]; then
-			echo "failed to generate lmdis token" >&2
-			exit 1
-		fi
 		cat > "$shim_dir/.env" <<EOF
 # written by install.sh. do not commit.
 SHIM_PORT=${SHIM_PORT}
 COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
-UPSTASH_REDIS_REST_URL=http://lmdis:3000
-UPSTASH_REDIS_REST_TOKEN=${token}
-LMDIS_REST_TOKEN=${token}
+# Compose overrides this to redis://redis:6379 inside the stack. Set it
+# here for bare-metal `bun dev` against a local Redis.
+REDIS_URL=redis://127.0.0.1:6379
 
 # optional bare JSON-RPC root; default is the Base RPC racer
 # https://evm.stupidtech.net/v1/8453
@@ -128,10 +114,11 @@ HUB_GRPC_ENDPOINT=107.20.169.236:3383
 EOF
 	)
 	chmod 600 "$shim_dir/.env"
-	echo "wrote $shim_dir/.env with a new lmdis token (not printed)"
+	echo "wrote $shim_dir/.env"
 else
 	echo "$shim_dir/.env already exists, leaving it"
 	echo "edit SHIM_PORT or COMPOSE_PROJECT_NAME in that file if this stack must not share another user's containers"
+	echo "after upgrading off lmdis: set REDIS_URL and drop UPSTASH_*/LMDIS_* — compose injects redis://redis:6379 for the app"
 fi
 
 listen_port=7300

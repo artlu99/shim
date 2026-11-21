@@ -35,7 +35,7 @@ export interface EitherWorldCast {
 // awaits its promise. A shared throw is still a throw — coalescing never
 // softens the outage contract. Entries are deleted on settle, so the map
 // only ever holds genuinely in-flight walks; every leg is deadline-bounded
-// (lmdis 5s, Hypersnap 10s, gRPC 10s), so even a stalled upstream
+// (Redis 5s, Hypersnap 10s, gRPC 10s), so even a stalled upstream
 // settles the flight and frees the entry rather than pinning callers.
 const inFlight = new Map<string, Promise<EitherWorldCast | undefined>>();
 

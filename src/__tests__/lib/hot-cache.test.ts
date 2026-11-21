@@ -116,7 +116,7 @@ describe("HotCache", () => {
 	// upstream entry's remaining lifetime (see the backfill tests in
 	// hypersnap-cache.test.ts). Keeping the cap well under the shortest
 	// upstream TTL (Ttl.SHORT = 60s) stays the sane default.
-	test("the wrapper constants stay under the shortest lmdis TTL", async () => {
+	test("the wrapper constants stay under the shortest Redis TTL", async () => {
 		const { HOT_TTL_MS, HOT_MAX_ENTRIES, HOT_MAX_WIRE_BYTES } = await import(
 			"../../lib/redis"
 		);

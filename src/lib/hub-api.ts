@@ -25,13 +25,14 @@ const hub = () => {
 	});
 };
 
-// Attribute hub-call failures at the source: cache-leg errors carry an
-// "lmdis:" prefix from LmdisClient, so anything else reaching a route-level
-// catch is the hub call itself — including bare "Failed to parse JSON" from
-// a 2xx response with a corrupt body (indistinguishable from a cache outage
-// in the 2026-10-30 logs). itty-fetcher attaches .status to its errors, but
-// in this runtime they are NOT Error instances (AGENTS.md note), so status
-// is sniffed off any object shape — the [200]-vs-[4xx] tell is the point.
+// Attribute hub-call failures at the source: cache-leg errors carry a
+// "redis:" prefix from the Redis backend, so anything else reaching a
+// route-level catch is the hub call itself — including bare "Failed to
+// parse JSON" from a 2xx response with a corrupt body (indistinguishable
+// from a cache outage in the 2026-10-30 logs). itty-fetcher attaches
+// .status to its errors, but in this runtime they are NOT Error instances
+// (AGENTS.md note), so status is sniffed off any object shape — the
+// [200]-vs-[4xx] tell is the point.
 const hubFailure = (uri: string, error: unknown): Error => {
 	const status =
 		typeof error === "object" && error !== null && "status" in error
