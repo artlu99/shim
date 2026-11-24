@@ -1,6 +1,6 @@
 {
 	"name": "shim",
-	"version": "2.0.0",
+	"version": "2.1.0",
 	"scripts": {
 		"dev": "bun run --watch src/shim-service.tsx",
 		"start": "NODE_ENV=production bun --smol src/shim-service.tsx",
