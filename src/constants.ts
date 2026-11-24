@@ -41,7 +41,25 @@ export const REFRESH_PARALLEL_BATCHES =
 // getCastsByFid walks pages of CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE until the
 // caller's cap or the hub runs dry. /refresh passes this so a cold fid is not
 // sealed after a single page. Every caller is clamped to it.
-export const MAX_SYNC_MESSAGES = 2000;
+// History: 10000 from birth, cut to 2000 by the harden sweep (8e1030d) that
+// bounded fan-outs. The loop that motivated the cut — parse-thread
+// saturation starving the in-process lmdis cache into its deadline, whose
+// fail-open traffic re-saturated the core — died with lmdis: the Redis
+// cache is out-of-process and maxmemory-bounded, so a wide walk now costs
+// walk-time latency, never failures. Back to 10000 because the walk is
+// newest-first and the upsert seals the watermark at the newest cast: a
+// warm fid whose delta exceeds the cap permanently loses its oldest casts,
+// and a cold one never stores more than the cap — at 2000 the corpus's
+// largest accounts sat just above 2000 rows. Measured 2026-11-24 at the
+// 2000 cap: a 55-fid cold wave walked 46k casts in 37s, RSS peaked +80MB
+// over rest and settled back, /health stayed 200 with p100 522ms against a
+// 5s probe budget. Overridable per box — the fleet's boxes differ — via
+// MAX_SYNC_MESSAGES in .env.
+const parsedSyncCap = Number(process.env.MAX_SYNC_MESSAGES);
+export const MAX_SYNC_MESSAGES =
+	Number.isInteger(parsedSyncCap) && parsedSyncCap >= 500
+		? parsedSyncCap
+		: 10000;
 
 // hub rpc
 export const HUB_RPC_DEADLINE_MS = 10_000;
