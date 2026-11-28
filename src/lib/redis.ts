@@ -115,7 +115,7 @@ export class BunRedisBackend implements RedisBackend {
 			const result = await this.client.get(key);
 			return deserialize<T>(result);
 		} catch (error) {
-			wrapRedisError(error);
+			return wrapRedisError(error);
 		}
 	}
 
@@ -147,7 +147,7 @@ export class BunRedisBackend implements RedisBackend {
 			}
 			return await this.client.set(key, serialized);
 		} catch (error) {
-			wrapRedisError(error);
+			return wrapRedisError(error);
 		}
 	}
 
@@ -158,7 +158,7 @@ export class BunRedisBackend implements RedisBackend {
 		try {
 			return await this.client.del(...keys);
 		} catch (error) {
-			wrapRedisError(error);
+			return wrapRedisError(error);
 		}
 	}
 
@@ -170,7 +170,7 @@ export class BunRedisBackend implements RedisBackend {
 		try {
 			return await this.client.hincrby(key, field, increment);
 		} catch (error) {
-			wrapRedisError(error);
+			return wrapRedisError(error);
 		}
 	}
 
@@ -178,7 +178,7 @@ export class BunRedisBackend implements RedisBackend {
 		try {
 			return await this.client.sadd(key, ...members.map(String));
 		} catch (error) {
-			wrapRedisError(error);
+			return wrapRedisError(error);
 		}
 	}
 
@@ -186,7 +186,7 @@ export class BunRedisBackend implements RedisBackend {
 		try {
 			return await this.client.smembers(key);
 		} catch (error) {
-			wrapRedisError(error);
+			return wrapRedisError(error);
 		}
 	}
 
@@ -194,7 +194,7 @@ export class BunRedisBackend implements RedisBackend {
 		try {
 			return await this.client.srem(key, ...members.map(String));
 		} catch (error) {
-			wrapRedisError(error);
+			return wrapRedisError(error);
 		}
 	}
 
@@ -202,7 +202,7 @@ export class BunRedisBackend implements RedisBackend {
 		try {
 			return await this.client.keys(pattern);
 		} catch (error) {
-			wrapRedisError(error);
+			return wrapRedisError(error);
 		}
 	}
 
@@ -227,7 +227,7 @@ export class BunRedisBackend implements RedisBackend {
 			}
 			return [result[0], result[1].map(String)];
 		} catch (error) {
-			wrapRedisError(error);
+			return wrapRedisError(error);
 		}
 	}
 

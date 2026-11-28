@@ -63,7 +63,7 @@ describe("/info", () => {
 			};
 		};
 
-		expect(body.version).toBe("2.0.0");
+		expect(body.version).toBe("2.1.0");
 		expect(body.gitSha).toBe("abc1234");
 		expect(Number.isNaN(Date.parse(body.startedAt))).toBe(false);
 		expect(body.resources.rssBytes).toBeGreaterThan(0);
