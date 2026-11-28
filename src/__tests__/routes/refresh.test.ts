@@ -1,4 +1,3 @@
-import "./../helpers/hub-env";
 import { afterAll, beforeAll, describe, expect, it, spyOn, type Mock } from "bun:test";
 import { MAX_SYNC_MESSAGES } from "../../constants";
 
@@ -85,10 +84,10 @@ describe("processFids", () => {
 		);
 	});
 
-	it("counts a fid whose sync fails on both worlds, without failing the run", async () => {
+	it("counts a fid whose sync fails, without failing the run", async () => {
 		syncCastsByFidSpy.mockImplementation(async (fid: number) => {
 			if (fid === 867) {
-				throw new Error("cast sync outage for fid 867: haatz | snapchain");
+				throw new Error("cast sync outage for fid 867: haatz down");
 			}
 			return { casts: [], numNew: 0 };
 		});

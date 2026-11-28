@@ -1,4 +1,3 @@
-import "./../helpers/hub-env";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { Elysia } from "elysia";
 import * as hubApi from "../../lib/hub-api";

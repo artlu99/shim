@@ -1,7 +1,5 @@
-import "./../helpers/hub-env";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import * as haatzGateway from "../../lib/haatz-gateway";
-import * as hubGrpc from "../../lib/hub-grpc";
 
 const { syncCastsByFid, syncChannelFeed } = await import("../../lib/cast-sync");
 
@@ -10,62 +8,27 @@ const result = { casts: [], numNew: 0 } as Awaited<
 >;
 
 let haatz: ReturnType<typeof spyOn>;
-let snapchain: ReturnType<typeof spyOn>;
 let haatzFeed: ReturnType<typeof spyOn>;
-let snapchainFeed: ReturnType<typeof spyOn>;
 
 afterEach(() => {
-	// only the spies this file's tests actually stubbed exist — a restoring
-	// crash in afterEach marks every test in the file failed
 	haatz?.mockRestore();
-	snapchain?.mockRestore();
 	haatzFeed?.mockRestore();
-	snapchainFeed?.mockRestore();
 });
 
-const stubLegs = (
-	haatzAnswer: () => Promise<unknown>,
-	snapchainAnswer: () => Promise<unknown>,
-) => {
-	haatz = spyOn(haatzGateway, "getHaatzCastsByFid").mockImplementation(
-		haatzAnswer as any,
-	);
-	snapchain = spyOn(hubGrpc, "getCastsByFid").mockImplementation(
-		snapchainAnswer as any,
-	);
-};
-
 describe("syncCastsByFid", () => {
-	test("Hypersnap is primary — a hit never reaches Snapchain", async () => {
-		stubLegs(
-			async () => ({ ...result, casts: [{ fid: 1 }] as any }),
-			async () => {
-				throw new Error("Snapchain must not be called");
-			},
-		);
-
-		const { casts } = await syncCastsByFid(1);
-
-		expect(casts).toHaveLength(1);
-		expect(snapchain).not.toHaveBeenCalled();
-	});
-
-	test("a clean Hypersnap miss consults Snapchain", async () => {
-		stubLegs(
-			async () => result,
+	test("returns the Hypersnap answer", async () => {
+		haatz = spyOn(haatzGateway, "getHaatzCastsByFid").mockImplementation(
 			async () => ({ ...result, casts: [{ fid: 1 }] as any }),
 		);
 
 		const { casts } = await syncCastsByFid(1);
 
 		expect(casts).toHaveLength(1);
+		expect(haatz).toHaveBeenCalledWith(1, undefined, undefined, undefined);
 	});
 
-	test("a Hypersnap outage falls through to Snapchain", async () => {
-		stubLegs(
-			async () => {
-				throw new Error("haatz gateway answered 500");
-			},
+	test("a clean empty Hypersnap answer is the miss", async () => {
+		haatz = spyOn(haatzGateway, "getHaatzCastsByFid").mockImplementation(
 			async () => result,
 		);
 
@@ -74,8 +37,10 @@ describe("syncCastsByFid", () => {
 		expect(casts).toEqual([]);
 	});
 
-	test("watermark and upsert options travel through to both legs", async () => {
-		stubLegs(async () => result, async () => result);
+	test("watermark and upsert options travel through", async () => {
+		haatz = spyOn(haatzGateway, "getHaatzCastsByFid").mockImplementation(
+			async () => result,
+		);
 
 		await syncCastsByFid(528, 500, 1759000000, { upsert: true });
 
@@ -84,90 +49,74 @@ describe("syncCastsByFid", () => {
 		});
 	});
 
-	test("both worlds failing throws the outage — never a silent empty world", async () => {
-		stubLegs(
+	test("a Hypersnap outage throws — never a silent empty world", async () => {
+		haatz = spyOn(haatzGateway, "getHaatzCastsByFid").mockImplementation(
 			async () => {
 				throw new Error("haatz down");
-			},
-			async () => {
-				throw new Error("snapchain down");
 			},
 		);
 
 		expect(syncCastsByFid(1)).rejects.toThrow(
-			/outage.*haatz down.*snapchain down/s,
+			/cast sync outage for fid 1: haatz down/,
 		);
 	});
-});
 
-describe("syncChannelFeed", () => {
-	test("Hypersnap is primary", async () => {
-		haatzFeed = spyOn(haatzGateway, "getHaatzChannelFeed").mockImplementation(
-			async () => ({ ...result, casts: [{ fid: 1 }] as any }),
-		);
-		snapchainFeed = spyOn(hubGrpc, "rawChannelFeed").mockImplementation(
-			async () => {
-				throw new Error("Snapchain must not be called");
-			},
-		);
-
-		const { casts } = await syncChannelFeed("https://warpcast.com/~/channel/india");
-
-		expect(casts).toHaveLength(1);
-		expect(snapchainFeed).not.toHaveBeenCalled();
-	});
-
-	test("both worlds failing throws the outage", async () => {
-		haatzFeed = spyOn(haatzGateway, "getHaatzChannelFeed").mockImplementation(
-			async () => {
-				throw new Error("haatz down");
-			},
-		);
-		snapchainFeed = spyOn(hubGrpc, "rawChannelFeed").mockImplementation(
-			async () => {
-				throw new Error("snapchain down");
-			},
-		);
-
-		expect(
-			syncChannelFeed("https://warpcast.com/~/channel/india"),
-		).rejects.toThrow(/outage/);
-	});
-});
-
-// Native fids live above the legacy uint32 ceiling — Snapchain cannot know
-// them. The fallback must never run for one, and a Hypersnap outage must
-// stay an outage instead of wearing Snapchain's empty answer as a miss.
-describe("syncCastsByFid: native fids", () => {
-	const NATIVE_FID = 4294967296;
-
-	test("a clean Hypersnap miss is the miss — Snapchain is never consulted", async () => {
-		stubLegs(
+	test("native fids use the same Hypersnap path", async () => {
+		const NATIVE_FID = 4294967296;
+		haatz = spyOn(haatzGateway, "getHaatzCastsByFid").mockImplementation(
 			async () => result,
-			async () => {
-				throw new Error("Snapchain must not be called");
-			},
 		);
 
 		const { casts } = await syncCastsByFid(NATIVE_FID);
 
 		expect(casts).toEqual([]);
-		expect(snapchain).not.toHaveBeenCalled();
+		expect(haatz).toHaveBeenCalledWith(
+			NATIVE_FID,
+			undefined,
+			undefined,
+			undefined,
+		);
+	});
+});
+
+describe("syncChannelFeed", () => {
+	test("returns the Hypersnap answer", async () => {
+		haatzFeed = spyOn(haatzGateway, "getHaatzChannelFeed").mockImplementation(
+			async () => ({ ...result, casts: [{ fid: 1 }] as any }),
+		);
+
+		const { casts } = await syncChannelFeed(
+			"https://warpcast.com/~/channel/india",
+		);
+
+		expect(casts).toHaveLength(1);
+		expect(haatzFeed).toHaveBeenCalledWith(
+			"https://warpcast.com/~/channel/india",
+			undefined,
+		);
 	});
 
-	test("a Hypersnap outage is an outage, not a legacy-world miss", async () => {
-		stubLegs(
+	test("a clean empty Hypersnap answer is the miss", async () => {
+		haatzFeed = spyOn(haatzGateway, "getHaatzChannelFeed").mockImplementation(
+			async () => result,
+		);
+
+		const { casts } = await syncChannelFeed(
+			"https://warpcast.com/~/channel/india",
+		);
+
+		expect(casts).toEqual([]);
+	});
+
+	test("a Hypersnap outage throws — never a silent empty channel", async () => {
+		haatzFeed = spyOn(haatzGateway, "getHaatzChannelFeed").mockImplementation(
 			async () => {
-				throw new Error("haatz gateway answered 500");
-			},
-			async () => {
-				throw new Error("Snapchain must not be called");
+				throw new Error("haatz down");
 			},
 		);
 
-		expect(syncCastsByFid(NATIVE_FID)).rejects.toThrow(
-			/cast sync outage for fid 4294967296/,
-		);
-		expect(snapchain).not.toHaveBeenCalled();
+		expect(
+			syncChannelFeed("https://warpcast.com/~/channel/india"),
+		).rejects.toThrow(/channel feed outage.*haatz down/s);
 	});
 });

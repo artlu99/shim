@@ -19,7 +19,7 @@ export const REACTIONS_DEFAULT_PAGE_SIZE = 250;
 // refresh endpoint
 export const MAX_FOLLOWERS = 100;
 // /refresh body fids array is clamped to this by t.Array maxItems — an
-// unauthenticated caller must not drive unbounded hub/gRPC work
+// unauthenticated caller must not drive unbounded gateway work
 export const MAX_REFRESH_FIDS = 100;
 // Fids walked concurrently by processFids. Each fid's walk parses up to
 // MAX_SYNC_MESSAGES messages in 500-message pages on the single JS
@@ -38,9 +38,9 @@ export const REFRESH_PARALLEL_BATCHES =
 		? parsedBatchWidth
 		: 12;
 
-// getCastsByFid walks pages of CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE until the
-// caller's cap or the hub runs dry. /refresh passes this so a cold fid is not
-// sealed after a single page. Every caller is clamped to it.
+// Haatz castsByFid walks pages of CASTS_AND_REPLIES_DEFAULT_PAGE_SIZE until
+// the caller's cap or the gateway runs dry. /refresh passes this so a cold
+// fid is not sealed after a single page. Every caller is clamped to it.
 // History: 10000 from birth, cut to 2000 by the harden sweep (8e1030d) that
 // bounded fan-outs. The loop that motivated the cut — parse-thread
 // saturation starving the in-process lmdis cache into its deadline, whose
@@ -60,9 +60,6 @@ export const MAX_SYNC_MESSAGES =
 	Number.isInteger(parsedSyncCap) && parsedSyncCap >= 500
 		? parsedSyncCap
 		: 10000;
-
-// hub rpc
-export const HUB_RPC_DEADLINE_MS = 10_000;
 
 // fan-out batching: async fetch bursts (feed hydration, mention hydration,
 // stats usernames) go through mapBatch in chunks of this size instead of
@@ -86,11 +83,9 @@ export const HYPERSNAP_API_ENDPOINT =
 export const HYPERSNAP_TIMEOUT_MS = 10_000;
 
 // The same haatz node also serves the snapchain /v1 HTTP JSON gateway (the
-// crackle.farcaster.xyz:3381 surface) proxied on 443. The gRPC and raw
-// gateway ports (2283, 3381-3383) sit behind a proxy front that only
-// forwards web ports, so corpus sync travels over HTTPS /v1 — castsByFid
-// (adds AND removes), castsByParent, startTimestamp all match the gRPC
-// semantics (live-verified 2026-11-12).
+// crackle.farcaster.xyz:3381 surface) proxied on 443. Corpus sync travels
+// over HTTPS /v1 — castsByFid (adds AND removes), castsByParent,
+// startTimestamp (live-verified 2026-11-12).
 export const HAATZ_GATEWAY_ENDPOINT =
 	process.env.HAATZ_GATEWAY_ENDPOINT || "https://haatz.quilibrium.com";
 export const HAATZ_GATEWAY_TIMEOUT_MS = 10_000;

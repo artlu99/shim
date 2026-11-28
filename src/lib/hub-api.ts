@@ -76,7 +76,7 @@ const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 // Hypersnap-only account has no crackle answer — so user hydration needs
 // the same dual-world treatment casts got. Cache keys are haatz:-prefixed:
 // the two networks disagree, and one key must not serve the other's
-// answer. Cache-leg failures degrade to uncached (same as getCastById);
+// answer. Cache-leg failures degrade to uncached;
 // gateway failures THROW — the fork-aware caller owns miss-vs-outage.
 const haatz = () =>
 	fetcher({
@@ -577,15 +577,14 @@ export const getHaatzUserByFid = async (
 };
 
 /**
- * The fork-aware user primitive — the user-side twin of
- * getCastInEitherWorld. Hypersnap is primary; the Snapchain (crackle)
- * answer is consulted on a clean Hypersnap miss or a Hypersnap outage.
- * A native-fid Hypersnap outage THROWS (same contract as cast-sync):
- * Snapchain cannot know the fid, so an empty fallback would be a lie.
- * For legacy fids, crackle still conflates outage with miss
- * (getHubUserByFid answers undefined for both — pre-existing behavior),
- * so a crackle failure cannot upgrade to a throw: the caller sees
- * undefined, the user cache stays unwritten, and the next call retries.
+ * The fork-aware user primitive. Hypersnap is primary; the Snapchain
+ * (crackle) answer is consulted on a clean Hypersnap miss or a
+ * Hypersnap outage. A native-fid Hypersnap outage THROWS: Snapchain
+ * cannot know the fid, so an empty fallback would be a lie. For legacy
+ * fids, crackle still conflates outage with miss (getHubUserByFid
+ * answers undefined for both — pre-existing behavior), so a crackle
+ * failure cannot upgrade to a throw: the caller sees undefined, the
+ * user cache stays unwritten, and the next call retries.
  */
 export const getUserInEitherWorld = async (
 	fid: number,

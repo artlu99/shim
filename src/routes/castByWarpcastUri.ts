@@ -22,8 +22,6 @@ export const getCastByWarpcastUri = new Elysia().get(
 		let cast: Cast | undefined;
 		const castDbObj = await getCastByShortHash(shortHash);
 		if (castDbObj) {
-			// fork-aware: a warm row whose cast lives only in the Hypersnap
-			// world is still valid
 			try {
 				const result = await getCastInEitherWorld(
 					fid,
@@ -42,8 +40,7 @@ export const getCastByWarpcastUri = new Elysia().get(
 				};
 			}
 		} else {
-			// the lookback walk must search the fid's casts in BOTH worlds —
-			// the cast behind a Warpcast URI may only exist in either one
+			// lookback against Hypersnap's recent casts for this fid
 			let casts: Cast[];
 			try {
 				({ casts } = await syncCastsByFid(fid, URI_SEARCH_LOOKBACK));

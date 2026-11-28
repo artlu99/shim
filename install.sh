@@ -108,9 +108,6 @@ REDIS_URL=redis://127.0.0.1:6379
 # optional bare JSON-RPC root; default is the Base RPC racer
 # https://evm.stupidtech.net/v1/8453
 # BASE_RPC_URL=
-
-# bare host:port, no scheme. replace when this hub rotates.
-HUB_GRPC_ENDPOINT=107.20.169.236:3383
 EOF
 	)
 	chmod 600 "$shim_dir/.env"

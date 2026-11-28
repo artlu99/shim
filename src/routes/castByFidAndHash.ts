@@ -7,13 +7,9 @@ import { parseFid } from "../lib/util";
 import { CastSchema } from "../types";
 
 /*
-	Snapchain and Hypersnap are forked: a message on one is not guaranteed
-	on the other. With the fid in hand this route resolves through the
-	fork-aware primitive — Hypersnap is primary, Snapchain is consulted
-	only on a Hypersnap miss — so a hash on either world is valid. A miss
-	here means both worlds answered not_found (deleted on both, or never
-	existed). A world that fails without answering means the verdict is
-	withheld: 503, never a false miss.
+	With the fid in hand this route resolves against Hypersnap. A miss
+	means a clean not_found. A Hypersnap failure without answering means
+	the verdict is withheld: 503, never a false miss.
 */
 
 export const getCastByFidAndHash = new Elysia().get(
@@ -88,10 +84,8 @@ export const getCastByFidAndHash = new Elysia().get(
 			tags: ["Cast"],
 			summary: "Get cast by fid and (full) hash",
 			description:
-				"Snapchain and Hypersnap are forked, so a hash on either world " +
-				"is valid: Hypersnap is primary and Snapchain is consulted only " +
-				"on a Hypersnap miss. A miss means both worlds answered " +
-				"not_found. An outage answers 503, not a false miss.",
+				"Resolves against Hypersnap. A miss means a clean not_found. " +
+				"An outage answers 503, not a false miss.",
 			responses: {
 				200: {
 					description: "Returns cast by fid and hash",
@@ -106,7 +100,7 @@ export const getCastByFidAndHash = new Elysia().get(
 				},
 				503: {
 					description:
-						"A cast world is unreachable without answering — an outage, not a miss",
+						"Hypersnap is unreachable without answering — an outage, not a miss",
 				},
 				400: {
 					description: "fid is not a canonical decimal integer",

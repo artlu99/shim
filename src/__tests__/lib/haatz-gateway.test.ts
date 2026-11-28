@@ -1,4 +1,3 @@
-import "./../helpers/hub-env";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import * as hubApi from "../../lib/hub-api";
 import * as sqlite from "../../lib/sqlite";

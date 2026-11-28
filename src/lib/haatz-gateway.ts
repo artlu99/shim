@@ -9,25 +9,23 @@ import {
 } from "../constants";
 import type { Cast } from "../types";
 import { asCastTypeName, asChain, asFormatVersion } from "./cast-fields";
-import { collectPagedMessages } from "./hub-grpc";
+import { collectPagedMessages } from "./paging";
 import { hydrateText } from "./hydration";
 import { upsertCasts } from "./sqlite";
 import { mapBatch, parseGatewayFid } from "./util";
 
 /*
 	The haatz node serves the snapchain /v1 HTTP JSON gateway on 443 — the
-	same surface snapchain exposes on 3381 (crackle.farcaster.xyz). The
-	node's gRPC and raw gateway ports sit behind a proxy front that only
-	forwards web ports, so the Hypersnap world is synced over HTTPS /v1:
+	same surface snapchain exposes on 3381 (crackle.farcaster.xyz). Corpus
+	sync and channel feeds travel over HTTPS /v1:
 
-	- /v1/castsByFid carries BOTH cast adds and removes (the
-	  getAllCastMessagesByFid equivalent), full message shape (signer,
-	  mentions + positions), reverse=true newest-first, startTimestamp
-	  inclusive of the watermark second — matching gRPC semantics.
+	- /v1/castsByFid carries BOTH cast adds and removes, full message
+	  shape (signer, mentions + positions), reverse=true newest-first,
+	  startTimestamp inclusive of the watermark second.
 	- /v1/castsByParent answers channel feeds.
 	- An unknown fid is 200 with zero messages and an empty page token —
-	  a clean miss. Any non-ok answer is an outage and THROWS; the fork
-	  -aware caller (cast-sync) decides what a failed leg means.
+	  a clean miss. Any non-ok answer is an outage and THROWS; cast-sync
+	  wraps that as a sync/feed outage.
 
 	Field shapes are protobuf JSON as measured live (2026-11-12): hashes
 	and signers are 0x-prefixed hex strings; the mapper validates before
@@ -164,10 +162,10 @@ interface GatewayPage<T> {
 }
 
 /**
- * The fid's casts as the Hypersnap world holds them. Mirrors getCastsByFid:
- * incremental via the watermark (server-side startTimestamp), result-capped,
- * removes filtered, upsert off unless asked. Throws on outage — an empty
- * message list is the only miss.
+ * The fid's casts as the Hypersnap world holds them: incremental via the
+ * watermark (server-side startTimestamp), result-capped, removes filtered,
+ * upsert off unless asked. Throws on outage — an empty message list is
+ * the only miss.
  */
 export const getHaatzCastsByFid = async (
 	fid: number,
@@ -223,9 +221,8 @@ export const getHaatzCastsByFid = async (
 };
 
 /**
- * The channel feed as the Hypersnap world holds it. One page of `limit`
- * (mirroring rawChannelFeed); upserts so the corpus grows behind the feed.
- * Throws on outage.
+ * The channel feed as the Hypersnap world holds it. One page of `limit`;
+ * upserts so the corpus grows behind the feed. Throws on outage.
  */
 export const getHaatzChannelFeed = async (
 	parentUrl: string,

@@ -15,12 +15,11 @@ export const processFids = async (allFids: number[]) => {
 	// (server-side startTimestamp filter); unknown users sync up to
 	// MAX_SYNC_MESSAGES. This is the only writer — a bounded read that
 	// upserts the newest casts seals the watermark, and this path never
-	// walks back behind it. Sync is fork-aware: Hypersnap /v1 primary,
-	// Snapchain gRPC on a clean miss.
+	// walks back behind it. Sync is Hypersnap /v1 only.
 	const watermarks = await getLatestCastTimestamps(allFids);
 
 	// Process FIDs in parallel batches of REFRESH_PARALLEL_BATCHES.
-	// A fid where BOTH worlds are unreachable is counted, not silently
+	// A fid where Hypersnap is unreachable is counted, not silently
 	// treated as an empty world — the stats carry the failure.
 	let failedFids = 0;
 	const results = [];

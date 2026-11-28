@@ -48,9 +48,8 @@ async function fetchAndHydrateFeed(
 ): Promise<HydratedCast[]> {
 	const bannedUsers = await getChannelBannedUsers(channelId);
 	const bannedUserFids = bannedUsers.map((bu) => bu.fid);
-	// fork-aware: Hypersnap /v1 primary, Snapchain gRPC on a clean miss.
-	// Both legs rethrow, so a total outage fails the feed loudly instead
-	// of answering "the channel is empty".
+	// Hypersnap /v1 only — an outage fails the feed loudly instead of
+	// answering "the channel is empty".
 	const { casts } = await syncChannelFeed(channelUrl, limit);
 
 	const filteredCasts = casts.filter(
@@ -85,11 +84,9 @@ export const postReverseChronFeed = new Elysia().post(
 			await mapBatch(
 				feedIdentifiers,
 				async (fi) => {
-					// fork-aware per-item resolution: a corpus row whose cast
-					// lives only in the Hypersnap world used to be silently
-					// dropped here by a Snapchain-only getCastById. An outage
-					// skips the item (a gap, logged) rather than failing the
-					// whole feed — a feed is not a validity verdict.
+					// Hypersnap per-item resolution. An outage skips the item
+					// (a gap, logged) rather than failing the whole feed — a
+					// feed is not a validity verdict.
 					let cast;
 					try {
 						const result = await getCastInEitherWorld(
@@ -168,7 +165,7 @@ export const postReverseChronFeed = new Elysia().post(
 
 export const getReverseChronChannelFeed = new Elysia().get(
 	"/channel/:channelId/reverse-chron",
-	async ({ params: { channelId, limit = FEED_DEFAULT_PAGE_SIZE } }) => {
+	async ({ params: { channelId, limit = FEED_DEFAULT_PAGE_SIZE }, set }) => {
 		if (!channelId) {
 			return {
 				success: false,
@@ -228,7 +225,19 @@ export const getReverseChronChannelFeed = new Elysia().get(
 		}
 
 		// If no cache, fetch fresh data
-		feed = await fetchAndHydrateFeed(channelId, channel.url, limit);
+		try {
+			feed = await fetchAndHydrateFeed(channelId, channel.url, limit);
+		} catch (error) {
+			console.error(
+				"channel feed outage:",
+				error instanceof Error ? error.message : JSON.stringify(error),
+			);
+			set.status = 503;
+			return {
+				success: false,
+				error: "channel feed outage",
+			};
+		}
 		await cacheClient.set(cacheKey, JSON.stringify(feed), { ex: Ttl.FEED });
 
 		return {
@@ -260,6 +269,10 @@ export const getReverseChronChannelFeed = new Elysia().get(
 							}),
 						},
 					},
+				},
+				503: {
+					description:
+						"Hypersnap is unreachable without answering — an outage, not an empty channel",
 				},
 			},
 		},
