@@ -44,9 +44,9 @@ describe("/info", () => {
 		]);
 		side.close();
 
-		const res = await new Elysia().use(info).handle(
-			new Request("http://localhost/info"),
-		);
+		const res = await new Elysia()
+			.use(info)
+			.handle(new Request("http://localhost/info"));
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
 			version: string;

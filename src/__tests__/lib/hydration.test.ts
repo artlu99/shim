@@ -19,13 +19,9 @@ const originalRedis = {
 };
 
 let getUserByFid: typeof import("../../lib/hydration").getUserByFid;
-let getSentFromBySignerKey: typeof import(
-	"../../lib/hydration"
-).getSentFromBySignerKey;
+let getSentFromBySignerKey: typeof import("../../lib/hydration").getSentFromBySignerKey;
 let hydrateText: typeof import("../../lib/hydration").hydrateText;
-let clearRememberedUsers: typeof import(
-	"../../lib/hydration"
-).clearRememberedUsers;
+let clearRememberedUsers: typeof import("../../lib/hydration").clearRememberedUsers;
 
 let failUserCacheWrites = false;
 
@@ -122,7 +118,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: "Test bio",
-				primaryAddress: null
+				primaryAddress: null,
 			};
 
 			const mockPrimaryAddress = "0x1234567890abcdef" as `0x${string}`;
@@ -147,7 +143,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: "Test bio",
-				primaryAddress: mockPrimaryAddress
+				primaryAddress: mockPrimaryAddress,
 			});
 		});
 
@@ -165,7 +161,7 @@ describe("Hydration Functions", () => {
 				displayName: null,
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null
+				primaryAddress: null,
 			});
 		});
 
@@ -178,7 +174,7 @@ describe("Hydration Functions", () => {
 				displayName: null,
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: null,
-				primaryAddress: null
+				primaryAddress: null,
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
@@ -194,7 +190,7 @@ describe("Hydration Functions", () => {
 				displayName: null,
 				pfpUrl: "https://example.com/pfp.jpg",
 				bio: null,
-				primaryAddress: null
+				primaryAddress: null,
 			});
 		});
 
@@ -207,7 +203,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: "Test bio",
-				primaryAddress: null
+				primaryAddress: null,
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
@@ -227,7 +223,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null
+				primaryAddress: null,
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
@@ -256,7 +252,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null
+				primaryAddress: null,
 			};
 
 			hubUserSpy.mockResolvedValue(mockHubUser);
@@ -319,9 +315,7 @@ describe("Hydration Functions", () => {
 		});
 
 		it("evicts the oldest remembered profile once the entry cap is hit", async () => {
-			const { REMEMBERED_USER_MAX_ENTRIES } = await import(
-				"../../constants"
-			);
+			const { REMEMBERED_USER_MAX_ENTRIES } = await import("../../constants");
 			primaryAddressSpy.mockResolvedValue(null);
 			hubUserSpy.mockImplementation(async (fid: number) => ({
 				fid,
@@ -384,7 +378,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null
+				primaryAddress: null,
 			});
 			primaryAddressSpy.mockResolvedValue(undefined);
 
@@ -545,7 +539,7 @@ describe("Hydration Functions", () => {
 				displayName: "Test User",
 				pfpUrl: null,
 				bio: null,
-				primaryAddress: null
+				primaryAddress: null,
 			};
 
 			hubUserSpy.mockResolvedValue(mockUser);

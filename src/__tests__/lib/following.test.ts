@@ -38,9 +38,8 @@ afterEach(() => {
 
 // itty-fetcher passes a Request — unwrap .url like user-lookup.test.ts
 const stubFetch = (impl: (url: string) => Response) => {
-	globalThis.fetch = Object.assign(
-		async (input: any) =>
-			impl(String(input instanceof Request ? input.url : input)),
+	globalThis.fetch = Object.assign(async (input: any) =>
+		impl(String(input instanceof Request ? input.url : input)),
 	) as unknown as typeof fetch;
 };
 

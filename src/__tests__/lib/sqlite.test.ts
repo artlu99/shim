@@ -17,7 +17,10 @@ import type { Cast } from "../../types";
 
 // offline suite: exercises every sqlite.ts export against a temp file DB so
 // nothing here touches the hub or Redis
-const dbPath = join(mkdtempSync(join(tmpdir(), "shim-sqlite-test-")), "test.sqlite");
+const dbPath = join(
+	mkdtempSync(join(tmpdir(), "shim-sqlite-test-")),
+	"test.sqlite",
+);
 
 // the singleton reads SQLITE_PATH on first use, so set it before any query
 process.env.SQLITE_PATH = dbPath;
@@ -147,9 +150,9 @@ describe("sqlite store", () => {
 					)
 					.all() as Array<{ detail: string }>;
 				plan.close();
-				expect(steps.some((step) => /casts_timestamp_desc_idx/.test(step.detail))).toBe(
-					true,
-				);
+				expect(
+					steps.some((step) => /casts_timestamp_desc_idx/.test(step.detail)),
+				).toBe(true);
 
 				const counts = await getInfoCounts();
 				expect(counts.fids).toBe(10);
@@ -244,9 +247,7 @@ describe("sqlite store", () => {
 		it("omits deleted casts", async () => {
 			const fids = [100, 101, 102];
 			const withDeleted = await getReverseChronFeed(fids, 90);
-			expect(withDeleted.items.some((row) => row.hash === hash(6))).toBe(
-				false,
-			);
+			expect(withDeleted.items.some((row) => row.hash === hash(6))).toBe(false);
 		});
 	});
 

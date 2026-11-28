@@ -34,9 +34,8 @@ const originalFetch = globalThis.fetch;
 // hosts tell the legs apart; within haatz, paths tell /v1 proofs from the
 // /v2 profile join
 const stubFetch = (impl: (url: string) => Response | Promise<Response>) => {
-	globalThis.fetch = Object.assign(
-		async (input: any) =>
-			impl(String(input instanceof Request ? input.url : input)),
+	globalThis.fetch = Object.assign(async (input: any) =>
+		impl(String(input instanceof Request ? input.url : input)),
 	) as unknown as typeof fetch;
 };
 

@@ -27,9 +27,8 @@ afterAll(() => {
 	mock.module("../../lib/redis", () => originalRedis);
 });
 
-const { hasFidSignedSocialContract } = await import(
-	"../../lib/social-contract"
-);
+const { hasFidSignedSocialContract } =
+	await import("../../lib/social-contract");
 
 const originalFetch = globalThis.fetch;
 

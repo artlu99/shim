@@ -44,16 +44,15 @@ const REMOVE_MESSAGE = {
 };
 
 const stubFetch = (impl: (url: string) => Promise<Response>) => {
-	globalThis.fetch = Object.assign(
-		async (url: any) => impl(String(url)),
+	globalThis.fetch = Object.assign(async (url: any) =>
+		impl(String(url)),
 	) as unknown as typeof fetch;
 };
 
 const originalFetch = globalThis.fetch;
 
-const { gatewayCastToCast, getHaatzCastsByFid, getHaatzChannelFeed } = await import(
-	"../../lib/haatz-gateway"
-);
+const { gatewayCastToCast, getHaatzCastsByFid, getHaatzChannelFeed } =
+	await import("../../lib/haatz-gateway");
 
 let upsertSpy: ReturnType<typeof spyOn>;
 let hydrateSpy: ReturnType<typeof spyOn>;
@@ -171,7 +170,10 @@ describe("gatewayCastToCast", () => {
 			await gatewayCastToCast({ ...ADD_MESSAGE, signer: undefined }),
 		).toBeUndefined();
 		expect(
-			await gatewayCastToCast({ ...ADD_MESSAGE, data: { ...ADD_MESSAGE.data, castAddBody: undefined } }),
+			await gatewayCastToCast({
+				...ADD_MESSAGE,
+				data: { ...ADD_MESSAGE.data, castAddBody: undefined },
+			}),
 		).toBeUndefined();
 		expect(await gatewayCastToCast(null)).toBeUndefined();
 	});
@@ -236,7 +238,9 @@ describe("getHaatzCastsByFid", () => {
 
 	test("throws on a non-ok answer — an outage, never an empty world", async () => {
 		stubFetch(async () => new Response("internal error", { status: 500 }));
-		expect(getHaatzCastsByFid(3854)).rejects.toThrow(/haatz gateway answered 500/);
+		expect(getHaatzCastsByFid(3854)).rejects.toThrow(
+			/haatz gateway answered 500/,
+		);
 	});
 
 	test("throws on a transport failure", async () => {

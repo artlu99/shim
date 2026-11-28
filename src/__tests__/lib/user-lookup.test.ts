@@ -31,11 +31,8 @@ afterAll(() => {
 	mock.module("../../lib/redis", () => originalRedis);
 });
 
-const {
-	getHaatzUserByFid,
-	getUserInEitherWorld,
-	getUserPrimaryAddress,
-} = await import("../../lib/hub-api");
+const { getHaatzUserByFid, getUserInEitherWorld, getUserPrimaryAddress } =
+	await import("../../lib/hub-api");
 
 // fixtures in the gateway's protobuf-JSON shape (white-lie typing — these
 // arrive deserialized over http)
@@ -87,8 +84,8 @@ const originalFetch = globalThis.fetch;
 
 // hosts tell the legs apart: the same /v1 uris mean different worlds
 const stubFetch = (impl: (url: string) => Response) => {
-	globalThis.fetch = Object.assign(
-		async (input: any) => impl(String(input instanceof Request ? input.url : input)),
+	globalThis.fetch = Object.assign(async (input: any) =>
+		impl(String(input instanceof Request ? input.url : input)),
 	) as unknown as typeof fetch;
 };
 
@@ -124,9 +121,7 @@ describe("getHaatzUserByFid", () => {
 
 	test("an empty answer is a clean miss", async () => {
 		haatzAnswer((url) =>
-			url.includes("userNameProofsByFid")
-				? { proofs: [] }
-				: { messages: [] },
+			url.includes("userNameProofsByFid") ? { proofs: [] } : { messages: [] },
 		);
 
 		expect(await getHaatzUserByFid(999999999)).toBeUndefined();
@@ -206,9 +201,7 @@ describe("getUserInEitherWorld: native fids", () => {
 
 	test("a native fid resolves from Hypersnap alone — crackle is never consulted", async () => {
 		haatzAnswer((url) =>
-			url.includes("userNameProofsByFid")
-				? HAATZ_PROOFS
-				: HAATZ_USER_DATA,
+			url.includes("userNameProofsByFid") ? HAATZ_PROOFS : HAATZ_USER_DATA,
 		);
 
 		const user = await getUserInEitherWorld(NATIVE_FID);
@@ -220,9 +213,7 @@ describe("getUserInEitherWorld: native fids", () => {
 		// any fetch that leaks past the haatz host throws — a crackle call
 		// would fail the test instead of silently answering an empty world
 		haatzAnswer((url) =>
-			url.includes("userNameProofsByFid")
-				? { proofs: [] }
-				: { messages: [] },
+			url.includes("userNameProofsByFid") ? { proofs: [] } : { messages: [] },
 		);
 
 		expect(await getUserInEitherWorld(NATIVE_FID)).toBeUndefined();
@@ -296,9 +287,7 @@ describe("getUserPrimaryAddress", () => {
 		});
 
 		const result = await getUserPrimaryAddress(2);
-		expect(result?.address).toBe(
-			"0xabcdef0123456789abcdef0123456789abcdef01",
-		);
+		expect(result?.address).toBe("0xabcdef0123456789abcdef0123456789abcdef01");
 	});
 
 	test("returns null when neither world has ETH verifications", async () => {

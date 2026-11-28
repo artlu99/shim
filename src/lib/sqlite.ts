@@ -141,7 +141,9 @@ let dbInstance: Kysely<Database> | null = null;
 
 const db = () => {
 	if (!dbInstance) {
-		dbInstance = createSqliteKysely(process.env.SQLITE_PATH ?? DEFAULT_SQLITE_PATH);
+		dbInstance = createSqliteKysely(
+			process.env.SQLITE_PATH ?? DEFAULT_SQLITE_PATH,
+		);
 	}
 	return dbInstance;
 };
@@ -336,7 +338,10 @@ export const getLatestCastTimestamps = async (
 	// is numeric MAX
 	const rows = await db()
 		.selectFrom("casts")
-		.select((eb) => [eb.ref("fid").as("fid"), eb.fn.max("timestamp").as("latest")])
+		.select((eb) => [
+			eb.ref("fid").as("fid"),
+			eb.fn.max("timestamp").as("latest"),
+		])
 		.where("fid", "in", fids)
 		.where("deleted_at", "is", null)
 		.groupBy("fid")

@@ -33,9 +33,7 @@ describe("hypersnapCastToCast", () => {
 		const cast = hypersnapCastToCast(FIXTURE);
 		expect(cast).toBeDefined();
 		expect(cast!.fid).toBe(3854);
-		expect(cast!.hash).toBe(
-			"0xa7c5f47033da848d6d16dac11c61838634a50c23",
-		);
+		expect(cast!.hash).toBe("0xa7c5f47033da848d6d16dac11c61838634a50c23");
 		expect(cast!.timestamp).toBe(
 			Math.floor(Date.parse("2026-10-18T00:50:15.000Z") / 1000),
 		);
@@ -112,7 +110,9 @@ describe("hypersnapCastToCast", () => {
 
 	test("rejects shapes without an author fid, hash, or timestamp", () => {
 		expect(hypersnapCastToCast({ ...FIXTURE, author: {} })).toBeUndefined();
-		expect(hypersnapCastToCast({ ...FIXTURE, hash: undefined })).toBeUndefined();
+		expect(
+			hypersnapCastToCast({ ...FIXTURE, hash: undefined }),
+		).toBeUndefined();
 		expect(
 			hypersnapCastToCast({ ...FIXTURE, timestamp: "not-a-date" }),
 		).toBeUndefined();
@@ -221,9 +221,7 @@ describe("getHypersnapCastByHash", () => {
 	};
 
 	test("resolves the cast on a 200 answer", async () => {
-		stubFetch(async () =>
-			Response.json({ cast: FIXTURE }, { status: 200 }),
-		);
+		stubFetch(async () => Response.json({ cast: FIXTURE }, { status: 200 }));
 		const cast = await getHypersnapCastByHash(HASH as `0x${string}`);
 		expect(cast?.fid).toBe(3854);
 	});

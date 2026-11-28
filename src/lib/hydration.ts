@@ -9,9 +9,7 @@ import { mapBatch } from "./util";
 
 // Drop legacy user.proNft from Redis hits written before the field was removed.
 // Also used for nested users inside channelFeed:* cache entries.
-export const stripLegacyProNft = (
-	user: User & { proNft?: unknown },
-): User => {
+export const stripLegacyProNft = (user: User & { proNft?: unknown }): User => {
 	const { proNft: _removed, ...rest } = user;
 	return rest;
 };

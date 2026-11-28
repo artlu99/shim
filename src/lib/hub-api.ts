@@ -55,16 +55,13 @@ const cachedFetcherGet = async <T>(uri: string, ttl: Ttl) => {
 		return cacheResponse as T;
 	}
 
-	const res = await retry(
-		{ backoff: (i) => 10 ** i },
-		async () => {
-			try {
-				return await hub().get(uri);
-			} catch (error) {
-				throw hubFailure(uri, error);
-			}
-		},
-	);
+	const res = await retry({ backoff: (i) => 10 ** i }, async () => {
+		try {
+			return await hub().get(uri);
+		} catch (error) {
+			throw hubFailure(uri, error);
+		}
+	});
 
 	await cacheClient.set(cacheKey, JSON.stringify(res), { ex: ttl });
 
@@ -100,16 +97,13 @@ const cachedHaatzGet = async <T>(uri: string, ttl: Ttl) => {
 		return cacheResponse as T;
 	}
 
-	const res = await retry(
-		{ backoff: (i) => 10 ** i },
-		async () => {
-			try {
-				return await haatz().get<T>(uri);
-			} catch (error) {
-				throw hubFailure(uri, error);
-			}
-		},
-	);
+	const res = await retry({ backoff: (i) => 10 ** i }, async () => {
+		try {
+			return await haatz().get<T>(uri);
+		} catch (error) {
+			throw hubFailure(uri, error);
+		}
+	});
 
 	try {
 		await redis().set(`haatz:${uri}`, JSON.stringify(res), { ex: ttl });
@@ -299,7 +293,13 @@ export const getFidByUsernameInEitherWorld = async (
 		const res = await cachedFetcherGet<UserNameProof>(uri, Ttl.LONG);
 		const fid = parseGatewayFid(res?.fid);
 		if (fid !== undefined) {
-			return { fid, origin: "snapchain", provisional: false, followerCount: null, profileUsername: null };
+			return {
+				fid,
+				origin: "snapchain",
+				provisional: false,
+				followerCount: null,
+				profileUsername: null,
+			};
 		}
 	} catch (error) {
 		snapchainError = error;
@@ -319,9 +319,7 @@ export const getFidByUsernameInEitherWorld = async (
 		if (fid !== undefined) {
 			// enrichment is best-effort: the proof is the answer, the
 			// profile is the popularity context
-			const profile = await getHaatzProfileByFid(fid).catch(
-				() => undefined,
-			);
+			const profile = await getHaatzProfileByFid(fid).catch(() => undefined);
 			return {
 				fid,
 				origin: "hypersnap",
@@ -537,10 +535,7 @@ export const getHaatzUserByFid = async (
 		),
 	]);
 	const messages = res?.messages ?? [];
-	const { username, fname, attestations } = profileNames(
-		res0.proofs,
-		messages,
-	);
+	const { username, fname, attestations } = profileNames(res0.proofs, messages);
 
 	if (messages.length === 0 && !fname && attestations.length === 0) {
 		return undefined;

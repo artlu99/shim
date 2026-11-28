@@ -140,7 +140,9 @@ const MVR_PROOFS = [
 
 const MVR_USER_DATA = [
 	{ data: { userDataBody: { type: "USER_DATA_TYPE_USERNAME", value: "mvr" } } },
-	{ data: { userDataBody: { type: "USER_DATA_TYPE_DISPLAY", value: "mvr 🐹" } } },
+	{
+		data: { userDataBody: { type: "USER_DATA_TYPE_DISPLAY", value: "mvr 🐹" } },
+	},
 ];
 
 describe("profileNames", () => {

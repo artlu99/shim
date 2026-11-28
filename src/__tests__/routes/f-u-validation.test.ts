@@ -47,14 +47,12 @@ afterEach(() => {
 
 // stub the world legs so a request past the parse boundary has
 // deterministic answers and no network
-const stubLegs = (
-	legs: {
-		getUsernameByFid?: () => Promise<unknown>;
-		getUserByFid?: (fid: number) => Promise<unknown>;
-		hasFidSignedSocialContract?: () => Promise<unknown>;
-		getFidByUsernameInEitherWorld?: (username: string) => Promise<unknown>;
-	},
-) => {
+const stubLegs = (legs: {
+	getUsernameByFid?: () => Promise<unknown>;
+	getUserByFid?: (fid: number) => Promise<unknown>;
+	hasFidSignedSocialContract?: () => Promise<unknown>;
+	getFidByUsernameInEitherWorld?: (username: string) => Promise<unknown>;
+}) => {
 	if (legs.getUsernameByFid) {
 		usernameSpy = spyOn(hubApi, "getUsernameByFid").mockImplementation(
 			legs.getUsernameByFid as any,
@@ -72,16 +70,16 @@ const stubLegs = (
 		).mockImplementation(legs.hasFidSignedSocialContract as any);
 	}
 	if (legs.getFidByUsernameInEitherWorld) {
-		nameSpy = spyOn(
-			hubApi,
-			"getFidByUsernameInEitherWorld",
-		).mockImplementation(legs.getFidByUsernameInEitherWorld as any);
+		nameSpy = spyOn(hubApi, "getFidByUsernameInEitherWorld").mockImplementation(
+			legs.getFidByUsernameInEitherWorld as any,
+		);
 	}
 };
 
 const app = new Elysia().use(fu).use(socialContract);
 
-const get = (path: string) => app.handle(new Request(`http://localhost${path}`));
+const get = (path: string) =>
+	app.handle(new Request(`http://localhost${path}`));
 
 describe("fid parse boundary", () => {
 	test("rejects floats with 400", async () => {

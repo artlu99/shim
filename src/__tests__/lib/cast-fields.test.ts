@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { asCastTypeName, asChain, asFormatVersion } from "../../lib/cast-fields";
+import {
+	asCastTypeName,
+	asChain,
+	asFormatVersion,
+} from "../../lib/cast-fields";
 
 describe("asCastTypeName", () => {
 	test("accepts protocol string and enum forms", () => {

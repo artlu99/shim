@@ -91,9 +91,7 @@ const spliceMentionUsernames = (
 
 		const username = profiles[i]?.username;
 		const handle =
-			typeof username === "string" && username !== ""
-				? username
-				: "<unknown>";
+			typeof username === "string" && username !== "" ? username : "<unknown>";
 		mentionsPositions.push(start);
 		splices.push({ start, end, handle });
 	}
@@ -265,8 +263,7 @@ export const getHypersnapCastByHash = async (
 	}
 
 	const data = (await res.json().catch(() => undefined)) as
-		| { cast?: unknown }
-		| undefined;
+		{ cast?: unknown } | undefined;
 	if (!data) {
 		throw new Error("Hypersnap answer did not parse");
 	}
@@ -364,16 +361,13 @@ export const getHaatzProfileByFid = async (
 	}
 
 	const data = (await res.json().catch(() => undefined)) as
-		| { user?: Record<string, unknown> }
-		| undefined;
+		{ user?: Record<string, unknown> } | undefined;
 	const user = data?.user;
 	if (typeof user !== "object" || user === null) {
 		throw new Error("Hypersnap user answer did not parse");
 	}
 
-	const profile = user.profile as
-		| { bio?: { text?: unknown } }
-		| undefined;
+	const profile = user.profile as { bio?: { text?: unknown } } | undefined;
 
 	const answer: HaatzProfile = {
 		username: typeof user.username === "string" ? user.username : null,
@@ -382,8 +376,7 @@ export const getHaatzProfileByFid = async (
 		// measured 2026-11-16: pfp_url sits on the user object, not in
 		// profile (profile carries the bio object)
 		pfpUrl: typeof user.pfp_url === "string" ? user.pfp_url : null,
-		bio:
-			typeof profile?.bio?.text === "string" ? profile.bio.text : null,
+		bio: typeof profile?.bio?.text === "string" ? profile.bio.text : null,
 		// u64-adjacent: measured as a number (9), could be a string —
 		// parseGatewayFid's exactness applies to counts the same way
 		followerCount: parseGatewayFid(user.follower_count) ?? null,

@@ -28,8 +28,7 @@ export const socialContract = new Elysia().get(
 			summary: "Whether a fid has signed the social contract",
 			responses: {
 				200: {
-					description:
-						"Returns whether the fid has signed the social contract",
+					description: "Returns whether the fid has signed the social contract",
 					content: {
 						"application/json": {
 							schema: t.Object({

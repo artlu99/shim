@@ -11,10 +11,8 @@ describeLive("Social Contract Routes", () => {
 	describe("GET /signed/:fid", () => {
 		// live suite: cold lmdis caches fan each fid out over the hub
 		// (verifications) + Base RPC (balanceOf) — well past bun's 5s default
-		it(
-			"should get social contract signature by fid",
-			async () => {
-				const testCases = [
+		it("should get social contract signature by fid", async () => {
+			const testCases = [
 				// live values at authoring time — these drift as accounts sign
 				{ fid: 2, expectedSigned: true }, // varun (yes)
 				// dwr (yes — minted to non-primary verified address 0x187c…8899;
@@ -42,8 +40,6 @@ describeLive("Social Contract Routes", () => {
 				expect(data.success).toBe(true);
 				expect(data.signed).toBe(expectedSigned);
 			}
-			},
-			60_000,
-		);
+		}, 60_000);
 	});
 });

@@ -1,0 +1,4 @@
+[fmt]
+# Match the existing codebase: tabs, 80-column wrap (Bun default).
+useTabs = true
+# printWidth = 80

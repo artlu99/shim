@@ -75,7 +75,9 @@ const with0x = (value: string): `0x${string}` =>
  * exactly like the gRPC path (getCastFromAddMessage) — the JSON text
  * carries placeholders, not names.
  */
-export const gatewayCastToCast = async (raw: unknown): Promise<Cast | undefined> => {
+export const gatewayCastToCast = async (
+	raw: unknown,
+): Promise<Cast | undefined> => {
 	if (typeof raw !== "object" || raw === null) return undefined;
 	const message = raw as GatewayMessage;
 	const fid = parseGatewayFid(message.data?.fid);
@@ -84,7 +86,8 @@ export const gatewayCastToCast = async (raw: unknown): Promise<Cast | undefined>
 	if (fid === undefined) return undefined;
 	if (typeof timestamp !== "number") return undefined;
 	if (typeof message.hash !== "string" || message.hash === "") return undefined;
-	if (typeof message.signer !== "string" || message.signer === "") return undefined;
+	if (typeof message.signer !== "string" || message.signer === "")
+		return undefined;
 	if (!body) return undefined;
 
 	// parsed per element, order-preserving — a native mention arrives as a
@@ -191,8 +194,7 @@ export const getHaatzCastsByFid = async (
 				params.set("pageToken", pageToken);
 			}
 			const json = (await gatewayGet(`/v1/castsByFid?${params}`)) as
-				| GatewayPage<unknown>
-				| undefined;
+				GatewayPage<unknown> | undefined;
 			return {
 				messages: Array.isArray(json?.messages) ? json.messages : [],
 				nextPageToken:
@@ -234,8 +236,7 @@ export const getHaatzChannelFeed = async (
 		reverse: "true",
 	});
 	const json = (await gatewayGet(`/v1/castsByParent?${params}`)) as
-		| GatewayPage<unknown>
-		| undefined;
+		GatewayPage<unknown> | undefined;
 
 	const messages = Array.isArray(json?.messages) ? json.messages : [];
 	const adds = messages.filter(isCastAdd);

@@ -1,5 +1,8 @@
 import { Elysia, t } from "elysia";
-import { getFidByUsernameInEitherWorld, getUsernameByFid } from "../lib/hub-api";
+import {
+	getFidByUsernameInEitherWorld,
+	getUsernameByFid,
+} from "../lib/hub-api";
 import { getUserByFid } from "../lib/hydration";
 import { hasFidSignedSocialContract } from "../lib/social-contract";
 import { parseFid } from "../lib/util";
@@ -97,7 +100,8 @@ export const fu = new Elysia()
 					"An outage answers 503, never a false miss.",
 				responses: {
 					200: {
-						description: "Returns the resolved fid, or null when both registries miss",
+						description:
+							"Returns the resolved fid, or null when both registries miss",
 						content: {
 							"application/json": {
 								// Object, not t.Object: the bare constructor keeps
@@ -105,7 +109,11 @@ export const fu = new Elysia()
 								schema: Object({
 									success: t.Boolean(),
 									fid: t.Union([t.Number(), t.Null()]),
-									origin: t.Union([t.Literal("snapchain"), t.Literal("hypersnap"), t.Null()]),
+									origin: t.Union([
+										t.Literal("snapchain"),
+										t.Literal("hypersnap"),
+										t.Null(),
+									]),
 									provisional: t.Boolean(),
 									followerCount: t.Union([t.Number(), t.Null()]),
 									profileUsername: t.Union([t.String(), t.Null()]),

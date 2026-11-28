@@ -44,11 +44,7 @@ const REDIS_CONNECTION_TIMEOUT_MS = 5_000;
 
 export type RedisBackend = {
 	get<T>(key: string): Promise<T | null>;
-	set<T>(
-		key: string,
-		value: T,
-		opts?: SetCommandOptions,
-	): Promise<"OK" | null>;
+	set<T>(key: string, value: T, opts?: SetCommandOptions): Promise<"OK" | null>;
 	del(...keys: string[]): Promise<number>;
 	hincrby(key: string, field: string, increment: number): Promise<number>;
 	sadd(key: string, ...members: (string | number)[]): Promise<number>;

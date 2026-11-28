@@ -1,4 +1,11 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	describe,
+	expect,
+	test,
+} from "bun:test";
 import {
 	installRedisMock,
 	redisMock,
@@ -103,9 +110,7 @@ describe("getHypersnapCastByHash: cache", () => {
 		expect(redisMock.store.has(`hyp:cast:${HASH}`)).toBe(false);
 
 		// network recovers — a clean miss must not be worn
-		stubFetch(async () =>
-			Response.json({ cast: FIXTURE }, { status: 200 }),
-		);
+		stubFetch(async () => Response.json({ cast: FIXTURE }, { status: 200 }));
 		const cast = await getHypersnapCastByHash(HASH as `0x${string}`);
 		expect(cast?.fid).toBe(3854);
 	});

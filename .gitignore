@@ -8,3 +8,10 @@ data/
 AGENTS.md
 TODO.md
 PLAN.md
+
+# tsc / editor emit — Bun runs TypeScript directly
+*.tsbuildinfo
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map

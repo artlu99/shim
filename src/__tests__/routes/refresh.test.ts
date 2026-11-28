@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it, spyOn, type Mock } from "bun:test";
+import {
+	afterAll,
+	beforeAll,
+	describe,
+	expect,
+	it,
+	spyOn,
+	type Mock,
+} from "bun:test";
 import { MAX_SYNC_MESSAGES } from "../../constants";
 
 // The sync leg is spied so no test ever reaches the live haatz gateway or
@@ -28,7 +36,10 @@ describe("processFids", () => {
 	});
 
 	it("passes the watermark for known fids", async () => {
-		syncCastsByFidSpy.mockImplementation(async () => ({ casts: [], numNew: 0 }));
+		syncCastsByFidSpy.mockImplementation(async () => ({
+			casts: [],
+			numNew: 0,
+		}));
 		getLatestCastTimestampsSpy.mockImplementation(
 			async (fids: number[]) => new Map(fids.map((fid) => [fid, 1759000000])),
 		);
@@ -46,7 +57,10 @@ describe("processFids", () => {
 	});
 
 	it("passes no watermark for unknown fids", async () => {
-		syncCastsByFidSpy.mockImplementation(async () => ({ casts: [], numNew: 0 }));
+		syncCastsByFidSpy.mockImplementation(async () => ({
+			casts: [],
+			numNew: 0,
+		}));
 		getLatestCastTimestampsSpy.mockImplementation(async () => new Map());
 
 		await processFids([617]);
@@ -60,10 +74,15 @@ describe("processFids", () => {
 	});
 
 	it("handles mixed known and unknown fids", async () => {
-		syncCastsByFidSpy.mockImplementation(async () => ({ casts: [], numNew: 0 }));
+		syncCastsByFidSpy.mockImplementation(async () => ({
+			casts: [],
+			numNew: 0,
+		}));
 		getLatestCastTimestampsSpy.mockImplementation(
 			async (fids: number[]) =>
-				new Map(fids.filter((fid) => fid === 2210).map((fid) => [fid, 1759123456])),
+				new Map(
+					fids.filter((fid) => fid === 2210).map((fid) => [fid, 1759123456]),
+				),
 		);
 
 		const stats = await processFids([2210, 4407]);

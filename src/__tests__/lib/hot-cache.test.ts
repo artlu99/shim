@@ -3,7 +3,9 @@ import { HotCache } from "../../lib/hot-cache";
 
 // injected clock — deterministic TTL tests without fake timers
 let clock = 0;
-const make = (overrides?: Partial<{ max: number; ttl: number; bytes: number }>) =>
+const make = (
+	overrides?: Partial<{ max: number; ttl: number; bytes: number }>,
+) =>
 	new HotCache(
 		overrides?.max ?? 3,
 		overrides?.ttl ?? 1000,
@@ -117,9 +119,8 @@ describe("HotCache", () => {
 	// hypersnap-cache.test.ts). Keeping the cap well under the shortest
 	// upstream TTL (Ttl.SHORT = 60s) stays the sane default.
 	test("the wrapper constants stay under the shortest Redis TTL", async () => {
-		const { HOT_TTL_MS, HOT_MAX_ENTRIES, HOT_MAX_WIRE_BYTES } = await import(
-			"../../lib/redis"
-		);
+		const { HOT_TTL_MS, HOT_MAX_ENTRIES, HOT_MAX_WIRE_BYTES } =
+			await import("../../lib/redis");
 		const { Ttl } = await import("../../lib/redis");
 		expect(HOT_TTL_MS).toBeLessThan(Ttl.SHORT * 1000);
 		expect(HOT_MAX_ENTRIES).toBeGreaterThan(0);

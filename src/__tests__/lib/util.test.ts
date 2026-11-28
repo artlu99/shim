@@ -225,11 +225,7 @@ describe("Utility Functions", () => {
 
 		it("should process a trailing partial batch", async () => {
 			const items = Array.from({ length: 7 }, (_, i) => i);
-			const result = await mapBatch(
-				items,
-				async (n) => n * 2,
-				3,
-			);
+			const result = await mapBatch(items, async (n) => n * 2, 3);
 			expect(result).toEqual([0, 2, 4, 6, 8, 10, 12]);
 		});
 

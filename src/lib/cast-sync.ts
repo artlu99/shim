@@ -14,12 +14,7 @@ export const syncCastsByFid = async (
 	options?: { upsert?: boolean },
 ) => {
 	try {
-		return await getHaatzCastsByFid(
-			fid,
-			maxMessages,
-			sinceTimestamp,
-			options,
-		);
+		return await getHaatzCastsByFid(fid, maxMessages, sinceTimestamp, options);
 	} catch (error) {
 		throw new Error(
 			`cast sync outage for fid ${fid}: ${

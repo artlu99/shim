@@ -15,8 +15,7 @@ const documentation: NonNullable<
 	info: {
 		title: "Shim API",
 		version: SHIM_VERSION,
-		description:
-			"Shim API for the Farcaster Snapchain (née Hubble Protocol)",
+		description: "Shim API for the Farcaster Snapchain (née Hubble Protocol)",
 		contact: {
 			name: "artlu",
 			url: "https://github.com/artlu99",
@@ -42,10 +41,8 @@ export const docs = new Elysia()
 	.onRequest(({ request }) => {
 		const url = new URL(request.url);
 		const proto =
-			request.headers
-				.get("x-forwarded-proto")
-				?.split(",")[0]
-				.trim() || url.protocol.replace(":", "");
+			request.headers.get("x-forwarded-proto")?.split(",")[0].trim() ||
+			url.protocol.replace(":", "");
 		documentation.servers = [{ url: `${proto}://${url.host}` }];
 	})
 	.use(
