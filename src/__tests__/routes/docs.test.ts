@@ -36,7 +36,7 @@ describe("docs", () => {
 			tags: Array<{ name: string }>;
 		};
 		expect(spec.info.title).toBe("Shim API");
-		expect(spec.info.version).toBe("2.1.0");
+		expect(spec.info.version).toBe("2.2.0");
 		expect(spec.tags.map((t) => t.name)).toContain("F 👉👈 U");
 	});
 
